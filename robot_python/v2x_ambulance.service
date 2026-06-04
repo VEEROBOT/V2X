@@ -1,0 +1,22 @@
+[Unit]
+Description=V2X Ambulance Robot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/v2x/robot_python
+
+# ── Edit CAR_IP before deploying ─────────────────────────────────────────────
+# Replace 192.168.1.x with the actual IP of the car Pi.
+# Find it with: hostname -I   (run on the car Pi)
+# Leave blank to run without position sharing (V2X-only emergency mode).
+ExecStart=/usr/bin/python3 main_ambulance.py --car-ip 192.168.1.x
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

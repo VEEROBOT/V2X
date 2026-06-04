@@ -1,0 +1,23 @@
+# V2X Robot — pure Python dependencies
+# Install on each Raspberry Pi (Ubuntu 22.04+):
+#
+#   sudo apt update
+#   sudo apt install -y python3-pip python3-picamera2 python3-pygame libcap-dev
+#   pip install -r requirements.txt
+#
+# Notes:
+#   picamera2  — best installed via apt (has native libcamera dependencies)
+#                  sudo apt install python3-picamera2
+#   pygame     — apt version fine: sudo apt install python3-pygame
+#                  OR: pip install pygame
+#   opencv     — use the headless variant on robots without display
+#                  pip install opencv-contrib-python-headless
+#                  use opencv-contrib-python on desktop for imshow windows
+
+pyserial>=3.5
+opencv-contrib-python-headless>=4.5.0
+numpy>=1.21
+pyyaml>=6.0
+pygame>=2.1.0
+# picamera2 — install via apt, not pip (see above)
+# If picamera2 is not available, camera falls back to cv2.VideoCapture automatically

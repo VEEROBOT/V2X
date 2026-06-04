@@ -1,0 +1,100 @@
+###############################################################################
+# LYRA CONTROL CONFIGURATION
+# 
+# Joystick, teleop, and cmd_vel gate settings.
+###############################################################################
+
+# =============================================================================
+# TELEOP TWIST JOY NODE
+# =============================================================================
+teleop_twist_joy_node:
+  ros__parameters:
+    # Axes mapping (for Xbox/PS4 style controller)
+    axis_linear:
+      x: 1      # Left stick vertical
+      y: -1     # Unused
+      z: -1     # Unused
+    
+    axis_angular:
+      pitch: -1  # Unused
+      roll: -1   # Unused
+      yaw: 3     # Right stick horizontal
+    
+    # Normal speed scales
+    scale_linear:
+      x: 0.8    # 80% of max linear speed
+      y: 0.0
+      z: 0.0
+    
+    scale_angular:
+      pitch: 0.0
+      roll: 0.0
+      yaw: 2.0  # rad/s
+    
+    # Turbo speed scales (when RB held)
+    scale_linear_turbo:
+      x: 1.0    # 100% of max linear speed
+      y: 0.0
+      z: 0.0
+    
+    scale_angular_turbo:
+      pitch: 0.0
+      roll: 0.0
+      yaw: 3.0  # rad/s
+    
+    # Button mapping
+    enable_button: 4           # LB - deadman switch
+    enable_turbo_button: 5     # RB - turbo mode
+    
+    # Behavior
+    require_enable_button: true
+    inverted_reverse: true
+    inverted_turn: false
+    publish_stamped_twist: false
+
+# =============================================================================
+# JOY NODE
+# =============================================================================
+joy_node:
+  ros__parameters:
+    device_id: 0
+    device_name: ''
+    deadzone: 0.05
+    autorepeat_rate: 20.0
+    coalesce_interval_ms: 1
+
+# =============================================================================
+# JOY TELEOP WRAPPER (ARM/DISARM buttons)
+# =============================================================================
+joy_teleop_wrapper:
+  ros__parameters:
+    arm_button: 7              # START button
+    disarm_button: 6           # SELECT/BACK button
+    arm_service: '/lyra/arm'
+    disarm_service: '/lyra/disarm'
+    button_debounce_time: 0.3  # seconds
+    service_timeout: 1.0       # seconds
+    log_button_presses: true
+
+# =============================================================================
+# CMD_VEL GATE
+# =============================================================================
+cmd_vel_gate:
+  ros__parameters:
+    deadman_button: 4          # LB
+    turbo_button: 5            # RB
+    normal_scale: 1.0
+    turbo_scale: 1.8
+    joystick_timeout: 0.5      # seconds
+    auto_arm_for_nav: true     # Auto-arm when Nav2 sends commands
+
+# =============================================================================
+# LYRA BRIDGE CONTROL
+# =============================================================================
+lyra_bridge:
+  ros__parameters:
+    control:
+      cmd_vel_timeout_s: 0.5     # Auto-stop if no cmd_vel for this duration
+      telemetry_rate_hz: 10.0    # Request telemetry at this rate
+      heartbeat_rate_hz: 1.0     # Send heartbeat at this rate
+      battery_low_threshold_v: 10.0

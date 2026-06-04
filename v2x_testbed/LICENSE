@@ -1,0 +1,44 @@
+V2X AUTHENTICATION TESTBED
+==========================
+
+Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+Author: Praveen Kumar
+Project: V2X Authentication Testbed
+
+All rights reserved.
+
+---
+
+TERMS OF USE
+
+This software is provided to authorized recipients for the purpose of
+research, evaluation, and integration with custom cryptographic algorithms.
+
+You may:
+  - Use this software for research and development purposes
+  - Integrate your cryptographic algorithms via the CryptoProvider interface
+  - Modify the software as required for integration
+  - Deploy this software in a controlled testbed environment
+  - Credit Siliris Technologies Pvt. Ltd in any publications or
+    demonstrations that use this software is suggested, but not a requirement
+
+You must:
+  - Retain this copyright notice and attribution in all copies
+  - Not claim authorship of the original codebase
+
+You may not:
+  - Redistribute this software to third parties without written permission
+  - Use this software for commercial deployment without a separate agreement
+  - Remove attribution from source files, binaries, or database records
+
+---
+
+DISCLAIMER
+
+This software is provided "as is" without warranty of any kind.
+Siliris Technologies Pvt. Ltd is not liable for any damages arising
+from its use.
+
+---
+
+Contact: Siliris Technologies Pvt. Ltd

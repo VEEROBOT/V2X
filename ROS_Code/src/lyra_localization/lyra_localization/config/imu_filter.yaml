@@ -1,0 +1,34 @@
+###############################################################################
+# IMU Filter Configuration - Madgwick Orientation Filter
+# 
+# Converts raw accel+gyro → orientation quaternion
+# Used by EKF for yaw rate smoothing (NOT absolute heading)
+###############################################################################
+
+imu_filter:
+  ros__parameters:
+    # Sensor inputs
+    use_mag: false  # No magnetometer available
+    
+    # TF publishing
+    publish_tf: false  # EKF handles all TF
+    
+    # Frame configuration
+    world_frame: enu  # East-North-Up convention
+    fixed_frame: odom
+    base_link_frame: base_link
+    
+    # Filter tuning
+    gain: 0.05  # Low gain = more stable, less responsive
+    zeta: 0.0   # No bias estimation needed
+    
+    # Output uncertainty
+    orientation_stddev: 0.05
+    
+    # Runtime behavior
+    stateless: false  # Maintain filter state
+    reverse_tf: false
+    
+    # Timeout tolerance (graceful degradation)
+    constant_dt: 0.0  # Use actual dt, not fixed timestep
+    publish_debug_topics: false

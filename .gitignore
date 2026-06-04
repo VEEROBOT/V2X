@@ -1,0 +1,82 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.python-version
+pip-log.txt
+pip-wheel-metadata/
+.pytest_cache/
+coverage.xml
+htmlcov/
+*.cover
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ROS 2 workspace build artifacts
+/ROS_Code/**/build/
+/ROS_Code/**/install/
+/ROS_Code/**/log/
+/ROS_Code/**/CMakeLists.txt.user
+
+# v2x_testbed build artifacts
+/v2x_testbed/**/build/
+/v2x_testbed/**/log/
+/v2x_testbed/**/install/
+
+# STM32 build artifacts
+/STM32F405RGTx/Debug/
+/STM32F405RGTx/Release/
+/STM32F405RGTx/*.map
+/STM32F405RGTx/*.o
+/STM32F405RGTx/*.hex
+/STM32F405RGTx/*.bin
+/STM32F405RGTx/*.elf
+/STM32F405RGTx/*.lst
+/STM32F405RGTx/*.axf
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake.user
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Misc
+.env
+.env.*
+
+# Exclude build/service outputs in robot_python if any
+robot_python/__pycache__/
+robot_python/*.pyc

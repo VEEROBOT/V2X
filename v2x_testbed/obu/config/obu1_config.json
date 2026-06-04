@@ -1,0 +1,13 @@
+{
+    "entity_id": "OBU1",
+    "obu_ip": "0.0.0.0",
+    "udp_listen_port": 5001,
+    "rsu_ip": "127.0.0.1",
+    "rsu_port": 5000,
+    "desktop_ip": "127.0.0.1",
+    "desktop_reg_port": 8001,
+    "is_emergency": false,
+    "delta_ts_ms": 50,
+    "crypto_provider": "placeholder",
+    "key_directory": "./keys/"
+}

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V2X Authentication Testbed</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0e17; color: #e0e0e0; }
+        .header { background: #111827; padding: 20px 30px; border-bottom: 2px solid #1e40af; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.4em; color: #60a5fa; }
+        .header .subtitle { color: #6b7280; font-size: 0.9em; margin-top: 4px; }
+        .tab-bar { display: flex; gap: 0; background: #111827; border-bottom: 1px solid #1f2937; padding: 0 30px; }
+        .tab { padding: 12px 24px; cursor: pointer; color: #6b7280; font-size: 0.9em; font-weight: 600; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab:hover { color: #93c5fd; }
+        .tab.active { color: #60a5fa; border-bottom-color: #2563eb; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px 30px; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+        .stat-card { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; transition: all 0.2s ease; }
+        .stat-card:hover { border-color: #2563eb; transform: translateY(-2px); }
+        .stat-card .label { color: #6b7280; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 1.8em; font-weight: 700; color: #60a5fa; margin-top: 4px; }
+        .stat-card .value.green { color: #34d399; }
+        .stat-card .value.red { color: #f87171; }
+        .stat-card .value.yellow { color: #fbbf24; }
+        .stat-card .unit { color: #4b5563; font-size: 0.5em; font-weight: 400; }
+        .section { background: #111827; border: 1px solid #1f2937; border-radius: 8px; margin-bottom: 20px; }
+        .section-header { padding: 14px 18px; border-bottom: 1px solid #1f2937; font-weight: 600; color: #93c5fd; display: flex; justify-content: space-between; align-items: center; }
+        .section-body { padding: 16px 18px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 8px 12px; color: #6b7280; font-size: 0.8em; text-transform: uppercase; border-bottom: 1px solid #1f2937; }
+        td { padding: 8px 12px; border-bottom: 1px solid #0f1629; font-size: 0.9em; }
+        .status-badge { padding: 2px 10px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+        .status-REGISTERED { background: #064e3b; color: #34d399; }
+        .status-SUCCESS { background: #064e3b; color: #34d399; }
+        .status-FAILED { background: #3b1f1f; color: #f87171; }
+        .event-log { max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85em; }
+        .event-line { padding: 4px 0; border-bottom: 1px solid #0f1629; }
+        .event-time { color: #6b7280; }
+        .event-type { color: #fbbf24; font-weight: 600; }
+        .event-type.fail { color: #f87171; }
+        .event-type.success { color: #34d399; }
+        .event-source { color: #60a5fa; }
+        .export-links { display: flex; gap: 10px; flex-wrap: wrap; }
+        .export-links a { color: #60a5fa; text-decoration: none; padding: 6px 14px; border: 1px solid #1e40af; border-radius: 6px; font-size: 0.85em; transition: all 0.2s; }
+        .export-links a:hover { background: #1e40af; color: white; }
+        .no-data { color: #4b5563; font-style: italic; padding: 20px; text-align: center; }
+        .timing-row { display: flex; align-items: center; margin: 8px 0; gap: 12px; }
+        .timing-label { width: 160px; font-size: 0.85em; color: #93c5fd; text-align: right; flex-shrink: 0; }
+        .timing-bar-bg { flex: 1; background: #1f2937; border-radius: 4px; height: 28px; position: relative; overflow: hidden; }
+        .timing-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 10px; font-size: 0.8em; font-weight: 600; color: white; min-width: 60px; transition: width 0.5s ease; }
+        .timing-bar.fast { background: linear-gradient(90deg, #059669, #34d399); }
+        .timing-bar.medium { background: linear-gradient(90deg, #d97706, #fbbf24); }
+        .timing-bar.slow { background: linear-gradient(90deg, #dc2626, #f87171); }
+        .timing-stats { width: 200px; font-size: 0.8em; color: #6b7280; flex-shrink: 0; }
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .grid-2col { grid-template-columns: 1fr; } }
+        .refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; display: inline-block; margin-left: 8px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .btn-sm { padding: 4px 12px; background: #1e40af; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+        .btn-sm:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>V2X Authentication Testbed</h1>
+            <div class="subtitle">Siliris Technologies — Real-Time Monitoring Dashboard</div>
+        </div>
+        <div style="color: #6b7280; font-size: 0.85em;">
+            <span id="clock"></span><span class="refresh-dot"></span>
+        </div>
+    </div>
+    <div class="tab-bar">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="performance">Performance</div>
+        <div class="tab" data-tab="events">Events</div>
+        <div class="tab" data-tab="export">Export</div>
+    </div>
+    <div class="container">
+
+        <!-- ===================== Overview ===================== -->
+        <div id="tab-overview" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card"><div class="label">Entities</div><div class="value" id="stat-entities">{{ stats.registered_entities }}</div></div>
+                <div class="stat-card"><div class="label">Auth Events</div><div class="value" id="stat-events">{{ stats.total_auth_events }}</div></div>
+                <div class="stat-card"><div class="label">Sessions ✓</div><div class="value green" id="stat-success">{{ stats.successful_sessions }}</div></div>
+                <div class="stat-card"><div class="label">Sessions ✗</div><div class="value red" id="stat-failed">{{ stats.failed_sessions }}</div></div>
+                <div class="stat-card"><div class="label">Replays</div><div class="value yellow" id="stat-replay">{{ stats.replay_detected }}</div></div>
+                <div class="stat-card"><div class="label">Sig Failures</div><div class="value red" id="stat-sigfail">{{ stats.signature_failures }}</div></div>
+                <div class="stat-card"><div class="label">TS Failures</div><div class="value red" id="stat-tsfail">{{ stats.timestamp_failures }}</div></div>
+                <div class="stat-card"><div class="label">Avg Latency</div><div class="value" id="stat-latency">{{ stats.avg_latency_ms }}<span class="unit"> ms</span></div></div>
+            </div>
+            <div class="section">
+                <div class="section-header">Registered Entities</div>
+                <div class="section-body">
+                    <table><thead><tr><th>Entity ID</th><th>Type</th><th>IP Address</th><th>Emergency</th><th>Status</th><th>Registered At</th></tr></thead>
+                    <tbody id="entity-table">
+                        {% for e in entities %}
+                        <tr><td><strong>{{ e.entity_id }}</strong></td><td>{{ e.entity_type }}</td><td>{{ e.ip_address }}</td><td>{{ "🚑 Yes" if e.is_emergency else "No" }}</td><td><span class="status-badge status-{{ e.status }}">{{ e.status }}</span></td><td>{{ e.registered_at[:19] }}</td></tr>
+                        {% endfor %}
+                    </tbody></table>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-header">Live Authentication Events <span style="font-size:0.75em; color:#4b5563;">auto-scrolling</span></div>
+                <div class="section-body">
+                    <div class="event-log" id="event-log" style="max-height:250px;">
+                        <div class="no-data" id="no-events">Waiting for authentication events...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================== Performance ===================== -->
+        <div id="tab-performance" class="tab-content">
+            <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="stat-card"><div class="label">Total Sessions</div><div class="value green" id="perf-total">0</div></div>
+                <div class="stat-card"><div class="label">Avg Latency</div><div class="value" id="perf-avg">0<span class="unit"> ms</span></div></div>
+                <div class="stat-card"><div class="label">Best Latency</div><div class="value green" id="perf-best">0<span class="unit"> ms</span></div></div>
+                <div class="stat-card"><div class="label">Worst Latency</div><div class="value yellow" id="perf-worst">0<span class="unit"> ms</span></div></div>
+            </div>
+            <div class="grid-2col">
+                <div class="section">
+                    <div class="section-header">Crypto Operation Timing <button class="btn-sm" onclick="refreshPerf()">Refresh</button></div>
+                    <div class="section-body" id="timing-bars"><div class="no-data">Run an authentication to see timings...</div></div>
+                </div>
+                <div class="section">
+                    <div class="section-header">Session Latency History</div>
+                    <div class="section-body" id="latency-chart"><div class="no-data">Run authentications to see latency history...</div></div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-header">Recent Session Metrics</div>
+                <div class="section-body" style="max-height:300px; overflow-y:auto;">
+                    <table><thead><tr><th>#</th><th>Time</th><th>Entity</th><th>Latency (ms)</th><th>Result</th><th>Provider</th></tr></thead>
+                    <tbody id="session-table"></tbody></table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================== Events ===================== -->
+        <div id="tab-events" class="tab-content">
+            <div class="section">
+                <div class="section-header">Full Authentication Event Log <span style="font-size:0.75em; color:#4b5563;" id="evt-count">0 events</span></div>
+                <div class="section-body">
+                    <div class="event-log" id="event-log-full" style="max-height:600px;">
+                        <div class="no-data">Waiting for events...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================== Export ===================== -->
+        <div id="tab-export" class="tab-content">
+            <div class="section">
+                <div class="section-header">Data Export (CSV)</div>
+                <div class="section-body">
+                    <p style="color:#6b7280; margin-bottom:16px;">Download raw data for analysis in Excel, Python, or other tools.</p>
+                    <div class="export-links">
+                        <a href="/export/entities">📋 Entities</a>
+                        <a href="/export/auth_events">📋 Auth Events</a>
+                        <a href="/export/crypto_timings">📋 Crypto Timings</a>
+                        <a href="/export/session_metrics">📋 Session Metrics</a>
+                        <a href="/export/throughput_tests">📋 Throughput Tests</a>
+                        <a href="/export/packet_loss_tests">📋 Packet Loss Tests</a>
+                    </div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-header">API Endpoints</div>
+                <div class="section-body" style="font-family:monospace; font-size:0.85em; color:#6b7280; line-height:2;">
+                    GET <a href="/api/stats" style="color:#60a5fa">/api/stats</a> — System statistics<br>
+                    GET <a href="/api/entities" style="color:#60a5fa">/api/entities</a> — Registered entities<br>
+                    GET <a href="/api/events" style="color:#60a5fa">/api/events</a> — Recent auth events<br>
+                    GET <a href="/api/timings" style="color:#60a5fa">/api/timings</a> — Raw crypto timings<br>
+                    GET <a href="/api/timing_summary" style="color:#60a5fa">/api/timing_summary</a> — Aggregated timing stats<br>
+                    GET <a href="/api/session_history" style="color:#60a5fa">/api/session_history</a> — Session latency history<br>
+                    GET <a href="/api/buffer_stats" style="color:#60a5fa">/api/buffer_stats</a> — Packet loss statistics
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const elog = document.getElementById('event-log');
+        const elogFull = document.getElementById('event-log-full');
+        let evtCount = 0;
+
+        // Clock
+        setInterval(() => { document.getElementById('clock').textContent = new Date().toLocaleTimeString(); }, 1000);
+
+        // Tabs
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('.tab').forEach(c => c.classList.remove('active'));
+                t.classList.add('active');
+                document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+                if (t.dataset.tab === 'performance') refreshPerf();
+            });
+        });
+
+        // Event helpers
+        function evtCls(type) {
+            if (!type) return '';
+            if (type.includes('FAIL') || type.includes('REPLAY') || type.includes('ABORT')) return ' fail';
+            if (type.includes('ESTABLISHED') || type.includes('PASS') || type.includes('COMPLETE')) return ' success';
+            return '';
+        }
+        function addEvt(container, e, max) {
+            const nd = container.querySelector('.no-data');
+            if (nd) nd.style.display = 'none';
+            const d = document.createElement('div');
+            d.className = 'event-line';
+            const ts = e.timestamp ? e.timestamp.substring(11, 23) : '--:--:--';
+            const sid = e.session_id ? ' [' + e.session_id.substring(0, 8) + ']' : '';
+            d.innerHTML = '<span class="event-time">' + ts + '</span> ' +
+                '<span class="event-type' + evtCls(e.event_type) + '">' + (e.event_type || 'UNKNOWN') + '</span> ' +
+                '<span class="event-source">' + (e.source || '') + ' → ' + (e.target || '') + sid + '</span>';
+            container.insertBefore(d, container.firstChild);
+            while (container.children.length > max) container.removeChild(container.lastChild);
+        }
+
+        // WebSocket
+        socket.on('auth_event', e => {
+            addEvt(elog, e, 100);
+            addEvt(elogFull, e, 500);
+            evtCount++;
+            document.getElementById('evt-count').textContent = evtCount + ' events';
+        });
+        socket.on('initial_state', s => {
+            updateStats(s.stats);
+            if (s.recent_events) {
+                s.recent_events.reverse().forEach(e => { addEvt(elog, e, 100); addEvt(elogFull, e, 500); evtCount++; });
+                document.getElementById('evt-count').textContent = evtCount + ' events';
+            }
+        });
+
+        // Stats
+        function updateStats(s) {
+            document.getElementById('stat-entities').textContent = s.registered_entities || 0;
+            document.getElementById('stat-events').textContent = s.total_auth_events || 0;
+            document.getElementById('stat-success').textContent = s.successful_sessions || 0;
+            document.getElementById('stat-failed').textContent = s.failed_sessions || 0;
+            document.getElementById('stat-replay').textContent = s.replay_detected || 0;
+            document.getElementById('stat-sigfail').textContent = s.signature_failures || 0;
+            document.getElementById('stat-tsfail').textContent = s.timestamp_failures || 0;
+            document.getElementById('stat-latency').innerHTML = (s.avg_latency_ms || 0) + '<span class="unit"> ms</span>';
+        }
+        setInterval(async () => { try { updateStats(await (await fetch('/api/stats')).json()); } catch(e){} }, 5000);
+
+        // Performance tab
+        async function refreshPerf() {
+            try {
+                const [tr, sr] = await Promise.all([fetch('/api/timing_summary'), fetch('/api/session_history')]);
+                const timings = await tr.json(), sessions = await sr.json();
+                renderBars(timings);
+                renderChart(sessions);
+                renderTable(sessions);
+            } catch(e) { console.error(e); }
+        }
+
+        function renderBars(data) {
+            const c = document.getElementById('timing-bars');
+            if (!data || !data.length) { c.innerHTML = '<div class="no-data">No crypto timings recorded yet.</div>'; return; }
+            const mx = Math.max(...data.map(t => t.avg_us));
+            c.innerHTML = data.map(t => {
+                const pct = Math.max(5, (t.avg_us / mx) * 100);
+                const cls = t.avg_us < 100 ? 'fast' : t.avg_us < 500 ? 'medium' : 'slow';
+                return '<div class="timing-row"><div class="timing-label">' + t.operation.replace(/_ms$/, '') +
+                    '</div><div class="timing-bar-bg"><div class="timing-bar ' + cls + '" style="width:' + pct + '%">' +
+                    t.avg_us.toFixed(0) + ' μs</div></div><div class="timing-stats">min ' + t.min_us.toFixed(0) +
+                    ' / max ' + t.max_us.toFixed(0) + ' μs (n=' + t.count + ')</div></div>';
+            }).join('');
+        }
+
+        function renderChart(sessions) {
+            const c = document.getElementById('latency-chart');
+            const ok = sessions.filter(s => s.auth_result === 'SUCCESS' && s.end_to_end_latency_ms);
+            if (!ok.length) { c.innerHTML = '<div class="no-data">No successful sessions yet.</div>'; return; }
+
+            const lats = ok.map(s => s.end_to_end_latency_ms);
+            const avg = lats.reduce((a, b) => a + b, 0) / lats.length;
+            const best = Math.min(...lats), worst = Math.max(...lats);
+
+            document.getElementById('perf-total').textContent = ok.length;
+            document.getElementById('perf-avg').innerHTML = avg.toFixed(2) + '<span class="unit"> ms</span>';
+            document.getElementById('perf-best').innerHTML = best.toFixed(2) + '<span class="unit"> ms</span>';
+            document.getElementById('perf-worst').innerHTML = worst.toFixed(2) + '<span class="unit"> ms</span>';
+
+            const mx = Math.max(...lats, 1);
+            const bw = Math.max(6, Math.min(20, Math.floor(580 / lats.length) - 2));
+            let h = '<div style="display:flex;align-items:flex-end;gap:2px;height:140px;padding:10px 0;border-bottom:1px solid #1f2937;overflow-x:auto;overflow-y:hidden;">';
+            ok.reverse().forEach(s => {
+                const ht = Math.max(4, (s.end_to_end_latency_ms / mx) * 120);
+                const col = s.end_to_end_latency_ms < avg ? '#34d399' : s.end_to_end_latency_ms < avg * 1.5 ? '#fbbf24' : '#f87171';
+                h += '<div title="' + s.end_to_end_latency_ms.toFixed(2) + ' ms" style="width:' + bw + 'px;height:' + ht + 'px;background:' + col + ';border-radius:2px 2px 0 0;flex-shrink:0;"></div>';
+            });
+            h += '</div><div style="display:flex;justify-content:space-between;color:#4b5563;font-size:0.75em;margin-top:4px;"><span>oldest</span><span>newest</span></div>';
+            h += '<div style="color:#6b7280;font-size:0.8em;margin-top:8px;">Target: &lt;200ms | Avg: ' + avg.toFixed(2) + 'ms | Best: ' + best.toFixed(2) + 'ms | Worst: ' + worst.toFixed(2) + 'ms</div>';
+            c.innerHTML = h;
+        }
+
+        function renderTable(sessions) {
+            const tb = document.getElementById('session-table');
+            if (!sessions || !sessions.length) { tb.innerHTML = '<tr><td colspan="6" class="no-data">No sessions yet.</td></tr>'; return; }
+            tb.innerHTML = sessions.map((s, i) =>
+                '<tr><td>' + (s.metric_id || i + 1) + '</td><td>' + (s.timestamp ? s.timestamp.substring(11, 23) : '-') +
+                '</td><td>' + (s.source_entity || '-') + '</td><td>' + (s.end_to_end_latency_ms ? s.end_to_end_latency_ms.toFixed(2) : '-') +
+                '</td><td><span class="status-badge status-' + (s.auth_result || 'FAILED') + '">' + (s.auth_result || '-') +
+                '</span></td><td>' + (s.crypto_provider || '-') + '</td></tr>'
+            ).join('');
+        }
+    </script>
+</body>
+</html>

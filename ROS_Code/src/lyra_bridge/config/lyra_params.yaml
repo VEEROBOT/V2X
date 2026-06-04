@@ -1,0 +1,46 @@
+# Lyra Bridge Configuration Parameters
+# Copy this file and modify for your robot setup
+
+lyra_bridge:
+  ros__parameters:
+    # ================================================================
+    # Serial Communication
+    # ================================================================
+    serial:
+      port: /dev/ttyAMA0        # RPi GPIO UART (pins 14/15)
+      baudrate: 115200           # Must match STM32 setting
+    
+    # ================================================================
+    # Robot Physical Parameters
+    # ================================================================
+    robot:
+      wheel_radius_m: 0.065      # 130mm diameter / 2
+      track_width_m: 0.377       # Distance between left/right wheel centers
+      max_wheel_speed_rad_s: 15.7  # ~150 RPM maximum
+    
+    # ================================================================
+    # Control Parameters
+    # ================================================================
+    control:
+      cmd_vel_timeout_s: 0.5     # Auto-stop if no cmd_vel for this duration
+      telemetry_rate_hz: 10.0    # Request telemetry at this rate
+      heartbeat_rate_hz: 1.0     # Send heartbeat at this rate
+      battery_low_threshold_v: 10.0
+    
+    # ================================================================
+    # Topic Names (override if needed)
+    # ================================================================
+    topics:
+      cmd_vel: /cmd_vel
+      wheel_rpm: /wheel_rpm
+      wheel_ticks: /wheel_ticks
+      battery_voltage: /battery_voltage
+      imu_raw: /imu/data_raw
+      armed_status: /lyra/armed
+    
+    # ================================================================
+    # Frame IDs (for TF integration in Phase 2)
+    # ================================================================
+    frames:
+      base_link: base_link
+      imu_link: imu_link

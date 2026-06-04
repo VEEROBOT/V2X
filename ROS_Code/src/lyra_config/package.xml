@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>lyra_config</name>
+  <version>1.0.0</version>
+  <description>Centralized configuration for Lyra robot - SINGLE SOURCE OF TRUTH for all parameters</description>
+  <maintainer email="praveen.kumar@siliris.com">Praveen Kumar</maintainer>
+  <license>GPLv3</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

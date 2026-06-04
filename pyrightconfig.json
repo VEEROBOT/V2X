@@ -1,0 +1,13 @@
+{
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "off",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/Debug",
+    "**/Release"
+  ]
+}

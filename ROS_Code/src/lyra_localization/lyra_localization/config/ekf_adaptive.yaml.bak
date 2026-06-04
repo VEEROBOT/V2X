@@ -1,0 +1,150 @@
+###############################################################################
+# Adaptive EKF Configuration - Graceful Sensor Degradation
+# 
+# Design: Single config that adapts to sensor availability
+# - Wheel odometry (REQUIRED - core navigation)
+# - IMU (OPTIONAL - improves heading accuracy)
+# - LiDAR odometry (OPTIONAL - Phase 4+, loop closure)
+#
+# Behavior:
+# - If sensor stops publishing → waits sensor_timeout → ignores sensor
+# - If sensor resumes → automatically re-integrates
+# - No manual intervention or node restarts needed
+###############################################################################
+
+ekf_filter_node:
+  ros__parameters:
+
+    # =========================================================================
+    # TF CONFIGURATION (CRITICAL)
+    # =========================================================================
+    tf_buffer_duration: 30.0
+    transform_timeout: 0.0
+    
+    # ========================================================================
+    # CORE SETTINGS
+    # ========================================================================
+    frequency: 20.0
+    sensor_timeout: 0.5  #How long to wait before ignoring sensor
+    two_d_mode: true
+    
+    publish_tf: true
+    publish_acceleration: false
+    permit_corrected_publication: true
+    
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+    
+    # ========================================================================
+    # SENSOR 0: WHEEL ODOMETRY (REQUIRED - PRIMARY NAVIGATION SOURCE)
+    # ========================================================================
+    # Provides: X, Y position + Yaw heading + vx velocity
+    # Priority: CRITICAL - robot cannot navigate without this
+    # Failure mode: Emergency stop (no graceful degradation possible)
+    
+    odom0: /wheel/odom
+
+    odom0_config: [
+      true,  true,  false,  # x, y, z (use x,y for 2D position)
+      false, false, true,   # roll, pitch, yaw (use yaw from wheels)
+      true,  false, false,  # vx, vy, vz (use vx linear velocity)
+      false, false, false,  # vroll, vpitch, vyaw
+      false, false, false   # ax, ay, az
+    ]
+    
+    odom0_differential: false  # Absolute measurements, not deltas
+    odom0_relative: false
+    odom0_queue_size: 10
+    
+    # ========================================================================
+    # SENSOR 1: IMU (OPTIONAL - ENHANCES HEADING ACCURACY)
+    # ========================================================================
+    # Provides: Yaw rate (vyaw) for smoother rotation tracking
+    # Priority: MEDIUM - improves accuracy but not critical
+    # Failure mode: Graceful degradation to wheel-only (5-10° more drift)
+    #
+    # NOTE: Absolute yaw NOT used (no magnetometer for global reference)
+    # Phase 4 SLAM will provide global heading correction via loop closure
+    
+    imu0: /imu/data
+    imu0_config: [
+      false, false, false,  # x, y, z (not used)
+      false, false, false,  # roll, pitch, yaw (NOT USED - no mag)
+      false, false, false,  # vx, vy, vz (not used)
+      false, false, true,   # vroll, vpitch, vyaw (USE vyaw for smoothing)
+      false, false, false   # ax, ay, az (not used)
+    ]
+    
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 10
+    imu0_remove_gravitational_acceleration: true
+    
+    # ========================================================================
+    # SENSOR 2: LIDAR ODOMETRY (PHASE 4+ - GLOBAL CORRECTION)
+    # ========================================================================
+    # Uncomment when slam_toolbox or scan_matching provides /lidar/odom
+    # Provides: Loop closure + drift correction
+    # Priority: HIGH (when available) - corrects accumulated error
+    # Failure mode: Graceful degradation to wheel+IMU
+    
+    # odom1: /lidar/odom
+    # odom1_config: [
+    #   true,  true,  false,
+    #   false, false, true,
+    #   false, false, false,
+    #   false, false, false,
+    #   false, false, false
+    # ]
+    # odom1_differential: false
+    # odom1_queue_size: 5
+    
+    # ========================================================================
+    # PROCESS NOISE COVARIANCE
+    # ========================================================================
+    # How much we expect the state to change per second
+    # Tuned for skid-steer 4WD with moderate wheel slip
+    
+    process_noise_covariance: [
+      0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025, 0.0, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025, 0.0, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.04, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.015
+    ]
+    
+    # ========================================================================
+    # INITIAL STATE COVARIANCE
+    # ========================================================================
+    # Our uncertainty about initial state
+    # Lower values = "we're confident about starting position"
+    
+    initial_estimate_covariance: [
+      1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  1e-6, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  1e-6, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  1e-6, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-1, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-1, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-6, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-6, 0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-6, 0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-3, 0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-6, 0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-6, 0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1e-6
+    ]

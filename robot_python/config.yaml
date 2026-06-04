@@ -1,0 +1,124 @@
+###############################################################################
+# V2X Robot — Pure Python Stack Configuration
+#
+# Road: 4×4 foam mats (60 cm each) = 2.4 m × 2.4 m rounded-square loop
+#   Black boundary / Black road / White broken centre line / Yellow yield zone
+#   AprilTag 36h11 in centre-line gaps, one every 0.5 m (~22 tags total)
+#
+# Both robots follow the WHITE CENTRE LINE (lane_offset_px = 0).
+# The car moves left onto the yellow yield zone during evasion.
+# The ambulance runs faster (0.28 m/s) and passes on the centre.
+#
+# Override per-robot values in main_car.py / main_ambulance.py or via CLI args.
+###############################################################################
+
+# ── STM32 serial link ────────────────────────────────────────────────────────
+serial:
+  port: /dev/ttyAMA0
+  baudrate: 115200
+
+# ── Robot physical parameters ────────────────────────────────────────────────
+robot:
+  wheel_radius_m: 0.065
+  track_width_m: 0.377
+  max_wheel_speed_rad_s: 15.7
+  cmd_vel_timeout_s: 0.5         # Stop motors if no command for this long
+
+# ── Camera ────────────────────────────────────────────────────────────────────
+camera:
+  use_picamera2: true            # true = picamera2 (Pi Camera on Ubuntu, recommended)
+                                 # false = cv2.VideoCapture (webcam / desktop testing)
+  device: 0                      # used only when use_picamera2: false
+  width: 320
+  height: 240
+
+# ── Lane follower ────────────────────────────────────────────────────────────
+lane_follower:
+  linear_speed: 0.20             # m/s — car default (ambulance overrides to 0.28)
+  max_angular_speed: 1.2         # rad/s
+  crop_top_ratio: 0.55           # ignore top 55% of frame
+  min_contour_area: 150          # px² — filters noise; handles thin yellow bars
+
+  kp: 0.005
+  ki: 0.0001
+  kd: 0.002
+
+  # White centre-line (HSV)
+  white_h_low:   0
+  white_h_high: 180
+  white_s_low:   0
+  white_s_high:  55
+  white_v_low:  190
+  white_v_high: 255
+
+  # Yellow yield zone (HSV)
+  yellow_h_low:   20
+  yellow_h_high:  35
+  yellow_s_low:   80
+  yellow_s_high: 255
+  yellow_v_low:   80
+  yellow_v_high: 255
+
+  lane_offset_px: 0              # 0 = track white centre line directly
+  debug_image: false             # show OpenCV debug window when true
+
+# ── AprilTag position estimator ──────────────────────────────────────────────
+position:
+  n_tags: 22                     # total tags around the full loop
+  tag_spacing_m: 0.5
+  tag_size_m: 0.08               # printed tag side length
+  focal_px: 250.0                # calibrate: pixel_width × known_dist / tag_size
+  detect_every_n: 3              # run detector on every Nth frame (~10 Hz at 30 fps)
+  debug_image: false
+
+# ── Position broadcaster (peer-to-peer UDP) ──────────────────────────────────
+position_broadcaster:
+  peer_ip: ''                    # set at runtime: car → ambulance IP, ambu → car IP
+  peer_port: 5002
+  broadcast_hz: 10.0
+  role: car                      # override to 'ambulance' in main_ambulance.py
+
+# ── V2X bridge ───────────────────────────────────────────────────────────────
+v2x_bridge:
+  role: car                      # override to 'ambulance' in main_ambulance.py
+  obu_binary: ''                 # leave empty for manual/testing mode
+  obu_config: ''
+  manual_mode: true              # true = use UDP trigger; false = spawn OBU binary
+  car_alert_port: 5001           # UDP port for RSU → car alerts
+  exit_clear_delay_s: 5.0
+
+# ── Emergency handler (car only) ─────────────────────────────────────────────
+emergency_handler:
+  evasion_linear_speed: 0.12    # m/s while steering left
+  evasion_angular_speed: 0.9    # rad/s left-turn rate
+  evasion_duration_s: 2.0       # time to steer left before holding
+  hold_timeout_s: 30.0          # safety: max hold before forced resume
+  clear_delay_s: 1.0            # grace period after ambulance passes
+  resume_ramp_duration_s: 2.0   # speed ramp back to normal
+  n_tags: 22
+  yield_zone_gap: 4             # yield only if ambulance ≤ 4 zones behind
+  position_timeout_s: 3.0       # stale peer position threshold
+
+# ── Joystick ──────────────────────────────────────────────────────────────────
+# RF joystick via USB dongle: appears as /dev/input/js0 (standard HID gamepad).
+# Hold deadman_button to enable joystick; release → robot returns to autonomous.
+# Tune axis numbers if your stick mapping differs (check with jstest /dev/input/js0).
+joystick:
+  device_index:   0             # pygame joystick index (0 = first connected)
+  deadman_button: 5             # button to hold for joystick control (5 = LB/L1)
+  axis_throttle:  1             # left stick Y  (push forward = negative raw)
+  axis_steering:  3             # right stick X (push right = positive raw → turn right)
+  max_speed:      0.40          # m/s — full stick forward
+  max_steering:   1.50          # rad/s — full stick sideways
+  deadzone:       0.10          # ignore stick noise below this fraction
+
+# ── Control socket (manual trigger without OBU) ──────────────────────────────
+# Send UDP JSON to 127.0.0.1:control_port to control the robot:
+#   {"cmd": "emergency_on"}   — activate emergency (ambulance)
+#   {"cmd": "emergency_off"}  — clear emergency
+#   {"cmd": "arm"}            — arm motors
+#   {"cmd": "disarm"}         — disarm motors
+#   {"cmd": "estop"}          — emergency stop
+#   {"cmd": "status"}         — print status to stdout
+control:
+  port: 5010                    # car listens on 5010, ambulance on 5011

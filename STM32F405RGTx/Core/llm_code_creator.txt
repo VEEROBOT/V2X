@@ -1,0 +1,5 @@
+The two files create a set of .h and .c files consolidated. Run the following in the same order. 
+
+Set-ExecutionPolicy RemoteSigned -Scope Process
+.\ConsolidateHeader.ps1
+.\ConsolidateSrc.ps1

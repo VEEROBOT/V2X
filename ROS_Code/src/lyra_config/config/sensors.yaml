@@ -1,0 +1,38 @@
+###############################################################################
+# LYRA SENSORS CONFIGURATION
+# 
+# Camera, LiDAR, and IMU sensor settings.
+###############################################################################
+
+# =============================================================================
+# CAMERA (Pi Camera)
+# =============================================================================
+pi_camera:
+  ros__parameters:
+    camera: 0
+    width: 320
+    height: 240
+    format: BGR888
+    frame_id: camera_optical_link
+
+# =============================================================================
+# LIDAR (SLAMTEC RPLidar)
+# =============================================================================
+sllidar_node:
+  ros__parameters:
+    serial_port: /dev/lyra_lidar
+    serial_baudrate: 460800
+    frame_id: lidar_link
+    scan_mode: Standard
+    angle_compensate: true
+    inverted: false
+
+# =============================================================================
+# IMU (LSM6DSRTR via STM32)
+# =============================================================================
+# IMU data comes from lyra_bridge, not a separate node.
+# These are the expected frame and topic settings.
+imu:
+  ros__parameters:
+    frame_id: imu_link
+    topic: /imu/data_raw

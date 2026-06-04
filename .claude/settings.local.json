@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c 'import ast; ast.parse\\(open\\('\\\\''__TRACKED_VAR__'\\\\''\\).read\\(\\)\\); print\\('\\\\''OK  __TRACKED_VAR__'\\\\''\\)')",
+      "PowerShell(Copy-Item \"d:\\\\V2X\\\\ROS_Code\\\\src\\\\lyra_bridge\\\\lyra_bridge\\\\protocol.py\" \"d:\\\\V2X\\\\robot_python\\\\lib\\\\protocol.py\")",
+      "PowerShell(Copy-Item \"d:\\\\V2X\\\\ROS_Code\\\\src\\\\lyra_bridge\\\\lyra_bridge\\\\transport.py\" \"d:\\\\V2X\\\\robot_python\\\\lib\\\\transport.py\")",
+      "PowerShell(Copy-Item \"d:\\\\V2X\\\\ROS_Code\\\\src\\\\lyra_bridge\\\\lyra_bridge\\\\telemetry.py\" \"d:\\\\V2X\\\\robot_python\\\\lib\\\\telemetry.py\")",
+      "Bash(powershell -Command \"\\(Get-Content 'd:\\\\V2X\\\\ROS_Code\\\\SETUP_GUIDE.md'\\).Count\")",
+      "PowerShell(Get-ChildItem -Recurse \"d:\\\\V2X\\\\robot_python\" | Where-Object {!$_.PSIsContainer} | Select-Object -ExpandProperty FullName)",
+      "Read(//mnt/d/V2X/**)",
+      "Bash(powershell.exe -Command 'Get-ChildItem -Recurse '\\\\''d:\\\\V2X\\\\STM32F405RGTx'\\\\'' | Where-Object {!$_.PSIsContainer} | Select-Object -ExpandProperty FullName')",
+      "PowerShell(Get-ChildItem -Recurse \"d:\\\\V2X\\\\STM32F405RGTx\" | Where-Object {!$_.PSIsContainer} | Select-Object -ExpandProperty FullName)",
+      "Bash(del \"d:\\\\V2X\\\\SETUP_GUIDE.md\")",
+      "PowerShell(Move-Item \"d:\\\\V2X\\\\ROS_Code\\\\pyrightconfig.json\" \"d:\\\\V2X\\\\pyrightconfig.json\")"
+    ]
+  }
+}
