@@ -64,9 +64,9 @@ lane_follower:
 
 # ── AprilTag position estimator ──────────────────────────────────────────────
 position:
-  n_tags: 22                     # total tags around the full loop
-  tag_spacing_m: 0.5
-  tag_size_m: 0.08               # printed tag side length
+  n_tags: 18                     # 16×16 ft rounded loop ≈ 18m perimeter, 1 tag/m
+  tag_spacing_m: 1.0             # 1 tag per metre
+  tag_size_m: 0.10               # 10 cm printed tag (outer border included)
   focal_px: 250.0                # calibrate: pixel_width × known_dist / tag_size
   detect_every_n: 3              # run detector on every Nth frame (~10 Hz at 30 fps)
   debug_image: false
@@ -81,8 +81,8 @@ position_broadcaster:
 # ── V2X bridge ───────────────────────────────────────────────────────────────
 v2x_bridge:
   role: car                      # override to 'ambulance' in main_ambulance.py
-  obu_binary: ''                 # leave empty for manual/testing mode
-  obu_config: ''
+  obu_binary: '../v2x_testbed/obu/build/obu_client'
+  obu_config: '../v2x_testbed/obu/config/obu1_config.json'
   manual_mode: false             # false = start RSU alert listener on car_alert_port
   car_alert_port: 5001           # UDP port for RSU → car alerts
   exit_clear_delay_s: 5.0
@@ -95,8 +95,8 @@ emergency_handler:
   hold_timeout_s: 30.0          # safety: max hold before forced resume
   clear_delay_s: 1.0            # grace period after ambulance passes
   resume_ramp_duration_s: 2.0   # speed ramp back to normal
-  n_tags: 22
-  yield_zone_gap: 4             # yield only if ambulance ≤ 4 zones behind
+  n_tags: 18
+  yield_zone_gap: 3             # yield only if ambulance ≤ 3 zones (3m) behind
   position_timeout_s: 3.0       # stale peer position threshold
 
 # ── Joystick ──────────────────────────────────────────────────────────────────
