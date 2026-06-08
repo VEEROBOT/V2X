@@ -23,8 +23,10 @@ Manual emergency (from another terminal on same Pi):
 
 import argparse
 import logging
+import os
 import signal
 import sys
+import threading
 import time
 
 import yaml
@@ -197,8 +199,11 @@ def main():
     logger.info("╚══════════════════════════════════════════════════════╝")
     logger.info("")
 
-    # Ensure SIGTERM (e.g. from `timeout` or systemd) triggers the finally block
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    def _sigterm(*_):
+        # If finally block hangs (libcamera C threads can block), force-kill after 5 s
+        threading.Timer(5.0, lambda: os.kill(os.getpid(), signal.SIGKILL)).start()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _sigterm)
 
     try:
         while True:
