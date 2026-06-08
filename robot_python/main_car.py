@@ -23,6 +23,7 @@ Manual emergency (from another terminal on same Pi):
 
 import argparse
 import logging
+import signal
 import sys
 import time
 
@@ -195,6 +196,9 @@ def main():
     logger.info("║  V2X emergency   : MONITORING                        ║")
     logger.info("╚══════════════════════════════════════════════════════╝")
     logger.info("")
+
+    # Ensure SIGTERM (e.g. from `timeout` or systemd) triggers the finally block
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
     try:
         while True:
