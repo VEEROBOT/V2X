@@ -105,12 +105,16 @@ emergency_handler:
 # Tune axis numbers if your stick mapping differs (check with jstest /dev/input/js0).
 joystick:
   device_index:   0             # pygame joystick index (0 = first connected)
-  deadman_button: 5             # button to hold for joystick control (5 = LB/L1)
+  deadman_button: 4             # hold LB (button 4) to enable joystick control
+  turbo_button:   5             # hold RB (button 5) simultaneously for turbo speed
   axis_throttle:  1             # left stick Y  (push forward = negative raw)
   axis_steering:  3             # right stick X (push right = positive raw → turn right)
-  max_speed:      0.40          # m/s — full stick forward
+  max_speed:      0.40          # m/s — full stick forward (normal)
+  turbo_speed:    0.80          # m/s — full stick forward in turbo mode
   max_steering:   1.50          # rad/s — full stick sideways
   deadzone:       0.10          # ignore stick noise below this fraction
+  accel_rate:     2.0           # m/s² — how fast speed ramps up
+  decel_rate:     4.0           # m/s² — how fast speed ramps down (braking)
 
 # ── Control socket (manual trigger without OBU) ──────────────────────────────
 # Send UDP JSON to 127.0.0.1:control_port to control the robot:

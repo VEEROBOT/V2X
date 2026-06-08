@@ -91,21 +91,24 @@ def main():
         height=cc['height'],
         use_picamera2=cc.get('use_picamera2', True),
     )
-    if not cam.start():
-        logger.error("Camera failed to open — exiting")
-        driver.stop()
-        sys.exit(1)
+    cam_ok = cam.start()
+    if not cam_ok:
+        logger.warning("Camera not available — lane following disabled, V2X running")
 
     # ── Joystick ──────────────────────────────────────────────────────────
     jc = cfg.get('joystick', {})
     joystick = Joystick(
         device_index=jc.get('device_index', 0),
-        deadman_button=jc.get('deadman_button', 5),
+        deadman_button=jc.get('deadman_button', 4),
+        turbo_button=jc.get('turbo_button', 5),
         axis_throttle=jc.get('axis_throttle', 1),
         axis_steering=jc.get('axis_steering', 3),
         max_speed=jc.get('max_speed', 0.4),
+        turbo_speed=jc.get('turbo_speed', 0.8),
         max_steering=jc.get('max_steering', 1.5),
         deadzone=jc.get('deadzone', 0.10),
+        accel_rate=jc.get('accel_rate', 2.0),
+        decel_rate=jc.get('decel_rate', 4.0),
     )
     joystick.start()   # non-fatal — returns False if no joystick, robot just runs autonomously
 
@@ -196,32 +199,36 @@ def main():
     try:
         while True:
             frame = cam.get_frame()
-            if frame is None:
-                time.sleep(0.05)
-                continue
 
-            # Position update (runs on every Nth frame inside estimator)
-            estimator.process(frame)
-            own_pos  = estimator.get_position()
-            peer_pos = broadcaster.get_peer_position()
-            broadcaster.set_own_position(own_pos)
+            if frame is not None:
+                # Position update (runs on every Nth frame inside estimator)
+                estimator.process(frame)
+                own_pos  = estimator.get_position()
+                peer_pos = broadcaster.get_peer_position()
+                broadcaster.set_own_position(own_pos)
 
-            # Update emergency handler state
-            handler.update_own_position(own_pos)
-            handler.update_peer_position(peer_pos)
-            handler.update_emergency(bridge.is_emergency())
+                # Update emergency handler state
+                handler.update_own_position(own_pos)
+                handler.update_peer_position(peer_pos)
+                handler.update_emergency(bridge.is_emergency())
 
-            # ── Velocity decision ─────────────────────────────────────────
+            # ── Velocity decision — always runs, even without camera ──────
             js_cmd = joystick.get_command()
             if js_cmd is not None:
                 # Joystick (deadman held) — bypass lane follower and emergency handler
                 vx, wz = js_cmd
-            else:
+            elif frame is not None:
                 # Autonomous — lane following through emergency handler
                 vx, wz = follower.process(frame)
                 vx, wz = handler.process(vx, wz)
+            else:
+                # No camera, no joystick — hold stop
+                vx, wz = 0.0, 0.0
 
             driver.set_velocity(vx, wz)
+
+            if frame is None:
+                time.sleep(0.02)  # ~50 Hz when no camera
 
     except KeyboardInterrupt:
         logger.info("Shutting down…")

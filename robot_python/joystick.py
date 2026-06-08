@@ -44,23 +44,32 @@ class Joystick:
 
     def __init__(self,
                  device_index:   int   = 0,
-                 deadman_button: int   = 5,
+                 deadman_button: int   = 4,
+                 turbo_button:   int   = 5,
                  axis_throttle:  int   = 1,
                  axis_steering:  int   = 3,
                  max_speed:      float = 0.4,
+                 turbo_speed:    float = 0.8,
                  max_steering:   float = 1.5,
-                 deadzone:       float = 0.10):
+                 deadzone:       float = 0.10,
+                 accel_rate:     float = 2.0,
+                 decel_rate:     float = 4.0):
 
         self._dev_idx      = device_index
         self._deadman_btn  = deadman_button
+        self._turbo_btn    = turbo_button
         self._ax_throttle  = axis_throttle
         self._ax_steering  = axis_steering
         self._max_speed    = max_speed
+        self._turbo_speed  = turbo_speed
         self._max_steering = max_steering
         self._deadzone     = deadzone
+        self._accel_rate   = accel_rate   # m/s² ramp up
+        self._decel_rate   = decel_rate   # m/s² ramp down (faster stop)
 
         self._vx          = 0.0
         self._wz          = 0.0
+        self._vx_slewed   = 0.0   # slew-rate-limited output
         self._deadman     = False
         self._lock        = threading.Lock()
         self._running     = False
@@ -99,11 +108,12 @@ class Joystick:
             logger.error("Joystick init error: %s", e)
             return False
 
-        logger.info("Joystick: '%s'  axes=%d  buttons=%d  deadman=btn%d",
+        logger.info("Joystick: '%s'  axes=%d  buttons=%d  deadman=btn%d  turbo=btn%d",
                     self._js.get_name(),
                     self._js.get_numaxes(),
                     self._js.get_numbuttons(),
-                    self._deadman_btn)
+                    self._deadman_btn,
+                    self._turbo_btn)
 
         self._running = True
         threading.Thread(target=self._loop, daemon=True, name='joystick').start()
@@ -133,16 +143,17 @@ class Joystick:
     # ── Background poll loop (50 Hz) ─────────────────────────────────────
     def _loop(self):
         import pygame
+        dt = 0.02   # matches time.sleep(0.02) below
 
         while self._running:
             pygame.event.pump()
 
             try:
                 n_buttons = self._js.get_numbuttons()
-                if self._deadman_btn < n_buttons:
-                    deadman = bool(self._js.get_button(self._deadman_btn))
-                else:
-                    deadman = False
+                deadman = bool(self._js.get_button(self._deadman_btn)) \
+                          if self._deadman_btn < n_buttons else False
+                turbo   = bool(self._js.get_button(self._turbo_btn)) \
+                          if self._turbo_btn < n_buttons else False
 
                 n_axes = self._js.get_numaxes()
 
@@ -157,14 +168,29 @@ class Joystick:
                 if abs(raw_str) < self._deadzone:
                     raw_str = 0.0
 
+                speed = self._turbo_speed if turbo else self._max_speed
                 # Left stick Y: push forward = axis negative → invert for positive vx
-                vx = -raw_thr * self._max_speed
+                vx_target = -raw_thr * speed
                 # Right stick X: push right = axis positive → turn right = negative wz
                 wz = -raw_str * self._max_steering
+
+                # Slew rate limit on vx: ramp up slowly, ramp down faster
+                diff = vx_target - self._vx_slewed
+                if diff > 0:
+                    step = min(diff,  self._accel_rate * dt)
+                else:
+                    step = max(diff, -self._decel_rate * dt)
+                self._vx_slewed += step
+                vx = self._vx_slewed
 
             except Exception as e:
                 logger.error("Joystick read error: %s", e)
                 deadman, vx, wz = False, 0.0, 0.0
+                self._vx_slewed = 0.0
+
+            if not deadman:
+                # Reset slew state so next press starts from zero
+                self._vx_slewed = 0.0
 
             with self._lock:
                 self._deadman = deadman

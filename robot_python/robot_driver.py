@@ -70,7 +70,7 @@ class RobotDriver:
         # Velocity command
         self._vx           = 0.0
         self._wz           = 0.0
-        self._cmd_time     = 0.0          # monotonic time of last set_velocity call
+        self._cmd_time     = None   # None until first set_velocity(); avoids spurious timeout on startup
         self._cmd_lock     = threading.Lock()
 
         # State
@@ -116,7 +116,7 @@ class RobotDriver:
         with self._cmd_lock:
             self._vx       = vx
             self._wz       = wz
-            self._cmd_time = time.monotonic()
+            self._cmd_time = time.monotonic()   # first call arms the timeout clock
 
     # ── Public getters ──────────────────────────────────────────────────────
     def get_telemetry(self):
@@ -175,12 +175,17 @@ class RobotDriver:
         with self._cmd_lock:
             vx        = self._vx
             wz        = self._wz
-            cmd_age   = now - self._cmd_time
+            cmd_time  = self._cmd_time
+
+        # cmd_time is None until the first set_velocity() call — treat as not yet commanded
+        if cmd_time is None:
+            self._send(build_set_wheel_vel_command(self._next_seq(), [0.0]*4))
+            return
+
+        cmd_age = now - cmd_time
 
         if not armed or cmd_age > self._cmd_timeout:
-            if not armed:
-                pass  # silent when disarmed
-            elif cmd_age > self._cmd_timeout:
+            if armed and cmd_age > self._cmd_timeout and (vx != 0.0 or wz != 0.0):
                 logger.warning(f"cmd_vel timeout ({cmd_age:.2f}s) — stopping")
             self._send(build_set_wheel_vel_command(self._next_seq(), [0.0]*4))
             return
