@@ -1,8 +1,9 @@
 # V2X Robot Demo — Setup Guide (Pure Python Stack)
 
-> **Last updated:** 2026-05-27  
+> **Last updated:** 2026-06-08  
 > **Stack:** Pure Python — no ROS2, no colcon, no sourcing. Just Python + pip.  
-> **Robots:** Car Pi + Ambulance Pi, each with STM32F405 motor controller.
+> **Robots:** Car Pi + Ambulance Pi, each with STM32F405 motor controller.  
+> **Hardware tested on:** Raspberry Pi 5, Ubuntu 24.04 LTS (Noble), Arducam B0390 (IMX219 8MP)
 
 ---
 
@@ -41,7 +42,7 @@ The **Car** receives this, moves left (Indian road rules), and resumes once the 
 |-----------|-----------|
 | STM32F405 board | UART TX/RX to Raspberry Pi GPIO 14/15 |
 | Raspberry Pi | Powers from robot battery (5V BEC) |
-| Camera (Pi Camera Module v2 or v3) | CSI ribbon cable to RPi camera port |
+| Camera (IMX219 — Arducam B0390 8MP or Pi Camera v2) | CSI ribbon cable to RPi **CAM/DISP 0** port |
 | 4x DC motors + encoders | Connected to STM32 motor driver |
 | RF joystick dongle | USB port on Raspberry Pi |
 
@@ -58,7 +59,8 @@ STM32 GND →  RPi GND   (Pin 6)
 
 ### Camera Mounting
 
-- Use **Pi Camera Module v2 or v3** — CSI ribbon cable into the camera port
+- **Tested:** Arducam B0390 (IMX219 8MP). Pi Camera Module v2 also works (same IMX219 sensor).
+- Connect via CSI ribbon cable into the **CAM/DISP 0** port (NOT CAM/DISP 1) on Raspberry Pi 5
 - Mount at the **front-bottom** of the robot, angled **30–45° downward** to see the road ahead
 
 ---
@@ -102,32 +104,45 @@ STM32 GND →  RPi GND   (Pin 6)
 ### 3.1 Install Ubuntu Server
 
 1. Download **Raspberry Pi Imager** from raspberrypi.com
-2. Flash **Ubuntu Server 22.04 LTS (64-bit)** to a microSD (16 GB+)
+2. Flash **Ubuntu Server 24.04 LTS (64-bit)** to a microSD (32 GB+)
 3. In Imager settings before flashing:
    - Hostname: `car-robot` (or `ambulance-robot`)
    - Enable SSH
    - Set WiFi credentials
-   - Username: `ubuntu` / password: your choice
+   - Username / password: your choice (these instructions use `veerobot`)
 
-> Ubuntu Server on Raspberry Pi uses `ubuntu` as the default username.
+> **Ubuntu 24.04 on Pi 5** — standard install. Ubuntu's built-in libcamera 0.2 does NOT
+> have the Pi 5 camera pipeline. Follow Section 3.5 after first boot to fix this.
 
 ### 3.2 First Boot
 
 ```bash
-ssh ubuntu@car-robot.local
+ssh veerobot@car-robot.local
 sudo apt update && sudo apt upgrade -y
 ```
 
 ### 3.3 Enable Camera and UART
 
-Edit `/boot/firmware/config.txt` — add at the bottom:
+Edit `/boot/firmware/config.txt` — find and replace the camera line, then add the UART overlay:
 
 ```
-# Pi Camera — required for picamera2 to see the camera
-camera_auto_detect=1
+# Disable auto-detect — specify the sensor explicitly
+camera_auto_detect=0
+dtoverlay=imx219,cam0          # IMX219 sensor on CAM/DISP 0 port
 
 # UART for STM32 — disables Bluetooth to free /dev/ttyAMA0
 dtoverlay=disable-bt
+```
+
+> `cam0` routes to CSI0 (the **CAM/DISP 0** port on Pi 5). If you accidentally use CAM/DISP 1,
+> change `cam0` to `cam1`. Both IMX219 sensors (Arducam B0390, Pi Camera v2) use `dtoverlay=imx219`.
+
+Also remove the serial console from the kernel command line so STM32 UART is free:
+
+```bash
+sudo nano /boot/firmware/cmdline.txt
+# Remove:  console=serial0,115200
+# Leave everything else on the same single line
 ```
 
 Then disable the Bluetooth service and reboot:
@@ -137,23 +152,141 @@ sudo systemctl disable hciuart
 sudo reboot
 ```
 
-After reboot, verify both work:
+After reboot, verify UART is up:
 
 ```bash
 ls /dev/ttyAMA0                  # must exist
-libcamera-hello --list-cameras   # must show "Available cameras"
 ```
 
-If `ttyAMA0` is missing: confirm `dtoverlay=disable-bt` is in `config.txt` and reboot.  
-If camera is missing: check the ribbon cable is fully seated.
+> **Do NOT run `libcamera-hello` yet** — Ubuntu 24.04's default libcamera 0.2 lacks the Pi 5
+> pipeline handler. Camera verification is done after Section 3.5.
 
 ### 3.4 Fix Serial Port Permission
 
 ```bash
-sudo usermod -a -G dialout ubuntu
+sudo usermod -a -G dialout $USER
 # Then log out and back in (or reboot) for the group to take effect
-# Verify:  groups ubuntu   — should include "dialout"
+# Verify:  groups   — should include "dialout"
 ```
+
+### 3.5 Fix libcamera for Ubuntu 24.04 + Pi 5
+
+Ubuntu 24.04 ships libcamera 0.2.0 which is missing the `PipelineHandlerRPiCFE` pipeline needed
+by Raspberry Pi 5 (RP1 camera controller). You need to install libcamera 0.5 from the RPi apt
+repository and build the Python 3.12 bindings from source.
+
+**Step A — Add Raspberry Pi apt repository:**
+
+```bash
+curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
+  | gpg --dearmor \
+  | sudo tee /usr/share/keyrings/raspberrypi-archive-keyring.gpg > /dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/raspberrypi-archive-keyring.gpg] \
+  https://archive.raspberrypi.com/debian/ bookworm main" \
+  | sudo tee /etc/apt/sources.list.d/raspi.list
+
+sudo apt update
+```
+
+**Step B — Install libcamera 0.5 runtime + IPA:**
+
+```bash
+sudo apt install -y libcamera0.5 libcamera-ipa libcamera-tools
+```
+
+**Step C — Build Python 3.12 bindings from source:**
+
+> The RPi apt package `python3-libcamera` is compiled for Python 3.11 (Debian Bookworm).
+> Ubuntu 24.04 uses Python 3.12 — ABI incompatible. We must compile.
+
+```bash
+sudo apt install -y meson ninja-build pybind11-dev python3-ply libcamera-dev
+
+git clone --depth 1 --branch v0.5.2+rpt20250903 \
+  https://github.com/raspberrypi/libcamera.git /tmp/libcamera-src
+cd /tmp/libcamera-src
+
+meson setup build \
+  -Dpycamera=enabled \
+  -Dcam=disabled \
+  -Dgstreamer=disabled \
+  -Dipas=[] \
+  -Dpipelines=[] \
+  -Dlc-compliance=disabled \
+  -Ddocumentation=disabled \
+  -Dtracing=disabled
+
+cd build && ninja src/py/libcamera/pylibcamera
+```
+
+This produces `src/py/libcamera/_libcamera.cpython-312-aarch64-linux-gnu.so`.
+
+**Step D — Install the compiled binding:**
+
+```bash
+SITE=/usr/lib/aarch64-linux-gnu/python3.12/site-packages/libcamera
+sudo mkdir -p $SITE
+sudo cp src/py/libcamera/_libcamera*.so $SITE/_libcamera.so
+
+# Copy the __init__.py from the Ubuntu package:
+dpkg -L python3-libcamera | grep __init__ | xargs -I{} sudo cp {} $SITE/
+```
+
+**Step E — Remove build tools (no longer needed):**
+
+```bash
+sudo apt remove -y meson ninja-build pybind11-dev python3-ply libcamera-dev
+sudo apt autoremove -y
+sudo rm -rf /tmp/libcamera-src
+```
+
+**Step F — Fix picamera2 DrmPreview import (headless systems):**
+
+`picamera2` tries to import `pykms` unconditionally. On headless Ubuntu (no KMS display),
+this crashes at startup. Patch the preview init:
+
+```bash
+PREV=$(python3 -c "import picamera2; import os; \
+  print(os.path.dirname(picamera2.__file__))")/previews/__init__.py
+
+sudo python3 - <<'EOF'
+import re, pathlib
+p = pathlib.Path("$PREV")   # replace with actual path from above command
+# Replace: from .drm_preview import DrmPreview
+# With:    try/except stub
+EOF
+```
+
+Or edit it manually — in `previews/__init__.py`, wrap the DrmPreview import:
+
+```python
+try:
+    from .drm_preview import DrmPreview
+except (ImportError, ModuleNotFoundError):
+    class DrmPreview:
+        def __init__(self, *a, **kw):
+            raise RuntimeError("DrmPreview unavailable: pykms not installed")
+```
+
+**Verify the camera works:**
+
+```bash
+cd ~/projects/V2X/robot_python
+source .venv/bin/activate
+python3 - <<'EOF'
+import picamera2, numpy as np
+cam = picamera2.Picamera2()
+cam.configure(cam.create_preview_configuration(main={"size":(320,240),"format":"BGR888"}))
+cam.start()
+import time; time.sleep(2)
+frame = cam.capture_array()
+print("Frame shape:", frame.shape, " dtype:", frame.dtype)
+cam.stop()
+EOF
+```
+
+Expected output: `Frame shape: (240, 320, 3)  dtype: uint8`
 
 ---
 
@@ -304,9 +437,10 @@ release to return to autonomous lane following.
 
 | Action | Effect |
 |--------|--------|
-| Hold **LB / L1** (button 5) | Joystick controls robot — autonomous pauses |
-| Release **LB / L1** | Returns to autonomous lane following immediately |
-| Left stick Y (axis 1) | Forward / reverse (up to 0.4 m/s) |
+| Hold **LB / L1** (button 4) | Joystick controls robot — autonomous pauses |
+| Hold **LB + RB** (buttons 4 + 5) | Turbo mode — up to 0.8 m/s |
+| Release **LB** | Returns to autonomous lane following immediately |
+| Left stick Y (axis 1) | Forward / reverse (up to 0.4 m/s normal, 0.8 m/s turbo) |
 | Right stick X (axis 3) | Steer left / right (up to 1.5 rad/s) |
 
 Joystick axis and button numbers vary by manufacturer. Check yours:
@@ -321,7 +455,8 @@ Update `config.yaml` if your numbers differ from the defaults:
 
 ```yaml
 joystick:
-  deadman_button: 5    # button to hold for manual control
+  deadman_button: 4    # LB — hold for manual control
+  turbo_button:   5    # RB — hold simultaneously for turbo speed
   axis_throttle:  1    # left stick Y axis
   axis_steering:  3    # right stick X axis
 ```
@@ -610,10 +745,40 @@ sudo journalctl -fu v2x_car
 
 ### Camera not found / picamera2 error
 
+**Test the camera** (works headless — no display needed):
+
 ```bash
-libcamera-hello --list-cameras
-# If blank: check ribbon cable, confirm camera_auto_detect=1 in /boot/firmware/config.txt, reboot
+cd ~/projects/V2X/robot_python && source .venv/bin/activate
+python3 -c "
+import picamera2, time
+cam = picamera2.Picamera2()
+cam.configure(cam.create_preview_configuration(main={'size':(320,240),'format':'BGR888'}))
+cam.start(); time.sleep(2)
+f = cam.capture_array()
+print('OK  shape=%s  dtype=%s' % (f.shape, f.dtype))
+cam.capture_file('/tmp/camera_test.jpg')
+cam.stop()
+print('Saved /tmp/camera_test.jpg')
+"
 ```
+
+> Open `/tmp/camera_test.jpg` in VS Code to view the captured image.
+
+**Checklist if camera is not found:**
+
+1. Ribbon cable is fully seated and not bent — re-seat at both ends
+2. Camera is in **CAM/DISP 0** port (NOT CAM/DISP 1) on Pi 5
+3. `/boot/firmware/config.txt` contains:
+   ```
+   camera_auto_detect=0
+   dtoverlay=imx219,cam0
+   ```
+4. `libcamera-ipa` is installed: `dpkg -l libcamera-ipa`
+5. `dmesg | grep imx219` — should show `imx219 registered` (not `probe failed`)
+6. Follow Section 3.5 if on Ubuntu 24.04 — libcamera must be replaced from RPi repo
+
+> **Note:** `libcamera-hello` and `cam --list-cameras` use Ubuntu's libcamera 0.2 tools
+> which lack the Pi 5 pipeline. They will always show no cameras. Use the Python test above.
 
 If you want to use a USB webcam instead of Pi Camera:
 
@@ -684,7 +849,8 @@ camera:
   use_picamera2: true        # true = Pi Camera CSI; false = USB webcam
 
 joystick:
-  deadman_button: 5          # verify with jstest /dev/input/js0
+  deadman_button: 4          # LB — hold to drive; verify with jstest /dev/input/js0
+  turbo_button:   5          # RB — hold + deadman for turbo
   axis_throttle:  1          # left stick Y
   axis_steering:  3          # right stick X
 ```
