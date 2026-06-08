@@ -7,7 +7,7 @@
     "desktop_ip": "192.168.0.103",
     "desktop_reg_port": 8001,
     "is_emergency": false,
-    "delta_ts_ms": 50,
+    "delta_ts_ms": 500,
     "crypto_provider": "placeholder",
     "key_directory": "./keys/"
 }
