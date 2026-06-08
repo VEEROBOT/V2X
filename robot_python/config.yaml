@@ -89,7 +89,7 @@ v2x_bridge:
 
 # ── Emergency handler (car only) ─────────────────────────────────────────────
 emergency_handler:
-  evasion_linear_speed: 0.12    # m/s while steering left
+  evasion_linear_speed: 0.20    # m/s while steering left (must be > wz * track_width/2 = 0.17 to avoid left-wheel reversal)
   evasion_angular_speed: 0.9    # rad/s left-turn rate
   evasion_duration_s: 2.0       # time to steer left before holding
   hold_timeout_s: 30.0          # safety: max hold before forced resume
