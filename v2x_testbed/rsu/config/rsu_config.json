@@ -5,13 +5,13 @@
     "desktop_ip": "127.0.0.1",
     "desktop_log_port": 9000,
     "desktop_reg_port": 8002,
-    "delta_ts_ms": 50,
+    "delta_ts_ms": 500,
     "receive_buffer_size": 50,
     "session_timeout_seconds": 300,
     "crypto_provider": "placeholder",
     "key_directory": "./keys/",
     "log_level": "INFO",
 
-    "car_alert_ip": "car-robot.local",
+    "car_alert_ip": "192.168.0.100",
     "car_alert_port": 5001
 }
