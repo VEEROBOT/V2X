@@ -83,7 +83,7 @@ v2x_bridge:
   role: car                      # override to 'ambulance' in main_ambulance.py
   obu_binary: ''                 # leave empty for manual/testing mode
   obu_config: ''
-  manual_mode: true              # true = use UDP trigger; false = spawn OBU binary
+  manual_mode: false             # false = start RSU alert listener on car_alert_port
   car_alert_port: 5001           # UDP port for RSU → car alerts
   exit_clear_delay_s: 5.0
 
@@ -107,6 +107,7 @@ joystick:
   device_index:   0             # pygame joystick index (0 = first connected)
   deadman_button: 4             # hold LB (button 4) to enable joystick control
   turbo_button:   5             # hold RB (button 5) simultaneously for turbo speed
+  arm_button:     7             # press Start (button 7) to arm/disarm toggle
   axis_throttle:  1             # left stick Y  (push forward = negative raw)
   axis_steering:  3             # right stick X (push right = positive raw → turn right)
   max_speed:      0.40          # m/s — full stick forward (normal)

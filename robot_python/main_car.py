@@ -104,6 +104,7 @@ def main():
         device_index=jc.get('device_index', 0),
         deadman_button=jc.get('deadman_button', 4),
         turbo_button=jc.get('turbo_button', 5),
+        arm_button=jc.get('arm_button', 7),
         axis_throttle=jc.get('axis_throttle', 1),
         axis_steering=jc.get('axis_steering', 3),
         max_speed=jc.get('max_speed', 0.4),
@@ -205,8 +206,25 @@ def main():
         sys.exit(0)
     signal.signal(signal.SIGTERM, _sigterm)
 
+    _robot_armed = True   # starts armed; Start button toggles
+
     try:
         while True:
+            # ── Start button: arm / disarm toggle ────────────────────────
+            if joystick.get_arm_press():
+                _robot_armed = not _robot_armed
+                if _robot_armed:
+                    driver.arm()
+                    logger.info("*** ARMED (Start button) ***")
+                else:
+                    driver.set_velocity(0.0, 0.0)
+                    driver.disarm()
+                    logger.info("*** DISARMED (Start button) ***")
+
+            if not _robot_armed:
+                time.sleep(0.02)
+                continue
+
             frame = cam.get_frame()
 
             if frame is not None:

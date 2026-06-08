@@ -46,6 +46,7 @@ class Joystick:
                  device_index:   int   = 0,
                  deadman_button: int   = 4,
                  turbo_button:   int   = 5,
+                 arm_button:     int   = 7,
                  axis_throttle:  int   = 1,
                  axis_steering:  int   = 3,
                  max_speed:      float = 0.4,
@@ -58,6 +59,7 @@ class Joystick:
         self._dev_idx      = device_index
         self._deadman_btn  = deadman_button
         self._turbo_btn    = turbo_button
+        self._arm_btn      = arm_button
         self._ax_throttle  = axis_throttle
         self._ax_steering  = axis_steering
         self._max_speed    = max_speed
@@ -67,13 +69,15 @@ class Joystick:
         self._accel_rate   = accel_rate   # m/s² ramp up
         self._decel_rate   = decel_rate   # m/s² ramp down (faster stop)
 
-        self._vx          = 0.0
-        self._wz          = 0.0
-        self._vx_slewed   = 0.0   # slew-rate-limited output
-        self._deadman     = False
-        self._lock        = threading.Lock()
-        self._running     = False
-        self._js          = None
+        self._vx              = 0.0
+        self._wz              = 0.0
+        self._vx_slewed       = 0.0   # slew-rate-limited output
+        self._deadman         = False
+        self._arm_btn_prev    = False  # for rising-edge detection
+        self._arm_press_flag  = False  # consumed by get_arm_press()
+        self._lock            = threading.Lock()
+        self._running         = False
+        self._js              = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────
     def start(self) -> bool:
@@ -108,12 +112,13 @@ class Joystick:
             logger.error("Joystick init error: %s", e)
             return False
 
-        logger.info("Joystick: '%s'  axes=%d  buttons=%d  deadman=btn%d  turbo=btn%d",
+        logger.info("Joystick: '%s'  axes=%d  buttons=%d  deadman=btn%d  turbo=btn%d  arm=btn%d",
                     self._js.get_name(),
                     self._js.get_numaxes(),
                     self._js.get_numbuttons(),
                     self._deadman_btn,
-                    self._turbo_btn)
+                    self._turbo_btn,
+                    self._arm_btn)
 
         self._running = True
         threading.Thread(target=self._loop, daemon=True, name='joystick').start()
@@ -140,6 +145,14 @@ class Joystick:
         with self._lock:
             return self._deadman
 
+    def get_arm_press(self) -> bool:
+        """Returns True once per press of the arm/disarm button (rising-edge, consume-on-read)."""
+        with self._lock:
+            if self._arm_press_flag:
+                self._arm_press_flag = False
+                return True
+            return False
+
     # ── Background poll loop (50 Hz) ─────────────────────────────────────
     def _loop(self):
         import pygame
@@ -150,10 +163,12 @@ class Joystick:
 
             try:
                 n_buttons = self._js.get_numbuttons()
-                deadman = bool(self._js.get_button(self._deadman_btn)) \
-                          if self._deadman_btn < n_buttons else False
-                turbo   = bool(self._js.get_button(self._turbo_btn)) \
-                          if self._turbo_btn < n_buttons else False
+                deadman   = bool(self._js.get_button(self._deadman_btn)) \
+                            if self._deadman_btn < n_buttons else False
+                turbo     = bool(self._js.get_button(self._turbo_btn)) \
+                            if self._turbo_btn < n_buttons else False
+                arm_now   = bool(self._js.get_button(self._arm_btn)) \
+                            if self._arm_btn < n_buttons else False
 
                 n_axes = self._js.get_numaxes()
 
@@ -185,16 +200,22 @@ class Joystick:
 
             except Exception as e:
                 logger.error("Joystick read error: %s", e)
-                deadman, vx, wz = False, 0.0, 0.0
+                deadman, arm_now, vx, wz = False, False, 0.0, 0.0
                 self._vx_slewed = 0.0
 
             if not deadman:
                 # Reset slew state so next press starts from zero
                 self._vx_slewed = 0.0
 
+            # Rising-edge detection for arm button
+            arm_press = arm_now and not self._arm_btn_prev
+            self._arm_btn_prev = arm_now
+
             with self._lock:
                 self._deadman = deadman
                 self._vx      = vx
                 self._wz      = wz
+                if arm_press:
+                    self._arm_press_flag = True
 
             time.sleep(0.02)   # 50 Hz
