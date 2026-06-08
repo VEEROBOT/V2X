@@ -14,13 +14,13 @@ The car drives on the white centre-line; when an emergency alert arrives it stee
 ```
 ┌──────────────────────────────────┐
 │  ╔════════════════════════════╗  │  Black boundary (foam tile edges)
-│  ║  ·  ·  ·  ·  ·  ·  ·  ·  ║  │  ·  = AprilTag (ID in table below)
+│  ║  ·  ·  ·  ·  ·  ·  ·  · ·  ║  │  ·  = AprilTag (ID in table below)
 │  ║                            ║  │
 │  ║  ·                      ·  ║  │  Road surface: BLACK foam tiles
 │  ║                            ║  │  Centre line:  WHITE tape (broken)
 │  ║  ·                      ·  ║  │  Left shoulder: YELLOW tape (yield)
 │  ║                            ║  │
-│  ║  ·  ·  ·  ·  ·  ·  ·  ·  ║  │
+│  ║  ·  ·  ·  ·  ·  ·  ·  · ·  ║  │
 │  ╚════════════════════════════╝  │
 └──────────────────────────────────┘
 ```
