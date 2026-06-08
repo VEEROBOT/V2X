@@ -150,6 +150,7 @@ def main():
         manual_mode=vc['manual_mode'],
         car_alert_port=vc['car_alert_port'],
         exit_clear_delay_s=vc['exit_clear_delay_s'],
+        obu_loop_count=vc.get('obu_loop_count', 1),
     )
     bridge.start()
 

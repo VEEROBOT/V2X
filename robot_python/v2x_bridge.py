@@ -9,7 +9,9 @@ Two operation modes selected at startup:
     Useful for integration testing without real V2X hardware.
 
   OBU (manual_mode=False or auto-detected when obu_binary path exists):
-    Spawns ./obu_client <config> --loop 999999 as a subprocess.
+    Spawns ./obu_client <config> --loop <obu_loop_count> as a subprocess.
+    Car:       obu_loop_count=1  — authenticate once, session lasts 300s, OBU exits.
+    Ambulance: obu_loop_count=0  — loop forever until service is stopped.
     Ambulance: OBU authenticates with RSU → RSU sends UDP alert to car.
     Car: listens on car_alert_port for RSU JSON notifications.
 
@@ -42,7 +44,8 @@ class V2XBridge:
                  obu_config: str = '',
                  manual_mode: bool = True,
                  car_alert_port: int = 5001,
-                 exit_clear_delay_s: float = 5.0):
+                 exit_clear_delay_s: float = 5.0,
+                 obu_loop_count: int = 1):
 
         self._role             = role
         self._obu_binary       = obu_binary
@@ -50,6 +53,7 @@ class V2XBridge:
         self._manual_mode      = manual_mode
         self._car_alert_port   = car_alert_port
         self._exit_clear_delay = exit_clear_delay_s
+        self._obu_loop_count   = obu_loop_count
 
         # Auto-detect OBU binary
         if self._obu_binary and os.path.isfile(self._obu_binary):
@@ -107,7 +111,8 @@ class V2XBridge:
         cmd = [self._obu_binary]
         if self._obu_config:
             cmd.append(self._obu_config)
-        cmd += ['--loop', '999999']
+        loop = '999999' if self._obu_loop_count <= 0 else str(self._obu_loop_count)
+        cmd += ['--loop', loop]
 
         logger.info("Starting OBU: %s", ' '.join(cmd))
         try:

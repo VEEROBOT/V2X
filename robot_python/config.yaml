@@ -86,6 +86,7 @@ v2x_bridge:
   manual_mode: false             # false = start RSU alert listener on car_alert_port
   car_alert_port: 5001           # UDP port for RSU → car alerts
   exit_clear_delay_s: 5.0
+  obu_loop_count: 1              # 1 = authenticate once then stop (session lasts 300s); 0 = loop forever
 
 # ── Emergency handler (car only) ─────────────────────────────────────────────
 emergency_handler:
