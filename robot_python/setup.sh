@@ -46,7 +46,7 @@ echo ""
 echo "[1/11] Installing base packages..."
 apt-get update -qq
 apt-get install -y -qq \
-    python3-pip python3-pygame \
+    python3-pip python3-venv python3-pygame \
     libcap-dev joystick \
     cmake libssl-dev build-essential \
     git curl gpg
@@ -95,12 +95,12 @@ if [ ! -f "$LIBCAM_SO" ]; then
         -Dipas=[] -Dpipelines=[] -Dlc-compliance=disabled \
         -Ddocumentation=disabled -Dtracing=disabled
     TARGET=$(ninja -C build -t targets all 2>/dev/null | grep '_libcamera.cpython.*\.so:' | head -1 | cut -d: -f1)
-    cd build && ninja ${TARGET:-}
+    TARGET="${TARGET:-src/py/libcamera/pylibcamera}"
+    cd build && ninja "$TARGET"
     SITE_DIR=/usr/lib/aarch64-linux-gnu/python3.12/site-packages/libcamera
     mkdir -p "$SITE_DIR"
     cp src/py/libcamera/_libcamera*.so "$SITE_DIR/_libcamera.so"
-    # Copy __init__.py from Ubuntu's python3-libcamera package
-    dpkg -L python3-libcamera 2>/dev/null | grep __init__ | xargs -I{} cp {} "$SITE_DIR/" 2>/dev/null || true
+    printf 'from ._libcamera import *\n' > "$SITE_DIR/__init__.py"
     popd > /dev/null
     rm -rf "$BUILD_DIR"
     # Remove build tools
