@@ -410,6 +410,12 @@ groups                       # must include: dialout
 sudo usermod -aG dialout veerobot && newgrp dialout   # if missing
 ```
 
+### STM32 responds on USB but not UART (`test_driver.py` returns `None`)
+If the STM32's USB cable is plugged into the Pi at the same time as the UART wires,
+the STM32 sends all responses to USB instead of UART3 — the Pi sees nothing on `/dev/ttyAMA0`.
+**Fix: unplug the USB cable from the STM32 board.** Only connect UART (TX/RX/GND wires).
+The USB connection is only needed when flashing firmware via STM32CubeIDE.
+
 ### RSU alert not received on car (no EVADING in logs)
 ```bash
 sudo journalctl -u v2x_car | grep "RSU alert listener"
