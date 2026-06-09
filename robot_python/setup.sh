@@ -62,8 +62,21 @@ if [ ! -f /etc/apt/sources.list.d/raspi.list ]; then
     echo "deb [signed-by=/usr/share/keyrings/raspberrypi-archive-keyring.gpg] https://archive.raspberrypi.com/debian/ bookworm main" \
         > /etc/apt/sources.list.d/raspi.list
 fi
+# Pin: RPi repo wins only for camera packages; Ubuntu keeps everything else.
+# Without this, libcamera0.5 from bookworm conflicts with Ubuntu 24.04 packages.
+cat > /etc/apt/preferences.d/90-raspi-camera << 'PINEOF'
+Package: libcamera* python3-picamera2 python3-libcamera rpicam-apps*
+Pin: origin archive.raspberrypi.com
+Pin-Priority: 600
+
+Package: *
+Pin: origin archive.raspberrypi.com
+Pin-Priority: 1
+PINEOF
 apt-get update -qq
-apt-get install -y -qq python3-picamera2 libcamera0.5 libcamera-ipa libcamera-tools
+apt-get install -f -y -qq                                      # fix any pre-existing broken deps
+apt-get install -y -qq --allow-change-held-packages \
+    python3-picamera2 libcamera0.5 libcamera-ipa libcamera-tools
 
 # ── 3. Build Python 3.12 libcamera bindings ─────────────────────────────────
 LIBCAM_SO=/usr/lib/aarch64-linux-gnu/python3.12/site-packages/libcamera/_libcamera.so
