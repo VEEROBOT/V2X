@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=veerobot
 WorkingDirectory=/home/veerobot/projects/V2X/robot_python
+ExecStartPre=/bin/sleep 5
 ExecStart=/home/veerobot/projects/V2X/robot_python/.venv/bin/python3 main_ambulance.py
 Restart=on-failure
 RestartSec=5
