@@ -84,7 +84,6 @@ def main():
     )
     driver.start()
     time.sleep(1.0)   # wait for STM32 ROS-mode init
-    driver.arm()
 
     # ── Camera ────────────────────────────────────────────────────────────
     cc = cfg['camera']
@@ -207,7 +206,7 @@ def main():
         sys.exit(0)
     signal.signal(signal.SIGTERM, _sigterm)
 
-    _robot_armed = True   # starts armed; Start button toggles
+    _robot_armed = False   # starts disarmed; press Start to arm
 
     try:
         while True:
