@@ -42,7 +42,26 @@ AMBULANCE PI
 
 ## Starting Everything
 
-### Order matters — Desktop first, then RSU, then Pis
+### Order is critical: Desktop → RSU → Pi
+
+The Desktop distributes public keys during registration. RSU must register with Desktop **before** OBU does — the OBU gets the RSU's public key from Desktop at registration time. Wrong order = `No peer public keys received` error and auth fails.
+
+---
+
+### Fresh start (first time, or after clearing sessions)
+
+**Step 0 — Laptop: clear old keys and sessions**
+```bash
+cd ~/V2X/v2x_testbed
+rm -f database/v2x_testbed.db database/master_secret.bin
+rm -rf rsu/build/keys/
+```
+Also on Car Pi (if keys exist from a previous run):
+```bash
+rm -rf ~/projects/V2X/robot_python/keys/
+```
+
+---
 
 **Step 1 — Laptop: start Desktop server**
 ```bash
@@ -64,31 +83,43 @@ Open `http://localhost:5000` in a browser.
 cd ~/V2X/v2x_testbed/rsu/build
 ./rsu_server ../config/rsu_config.json
 ```
-You should see:
+RSU registers with Desktop (since keys were cleared). You should see on the Desktop terminal:
 ```
+[REG] RSU registered
+```
+And RSU terminal:
+```
+[RSU] ΔTS: 500 ms
 [RSU] Car alert target: 192.168.0.100:5001
-[RSU] Listening on UDP 5000
 ```
 
-**Step 3 — Car Pi: service starts automatically on boot**
-
-If it didn't start or you need to restart after a config change:
+**Step 3 — Car Pi: restart service**
 ```bash
 sudo systemctl restart v2x_car
 sudo journalctl -fu v2x_car        # watch live logs
 ```
 
-Expected car Pi log:
+OBU registers with Desktop (since keys were cleared), gets RSU's public key, then authenticates. Expected car Pi log:
 ```
-Camera: picamera2  320x240
-Joystick: 'Xbox 360 Controller'  deadman=btn4  turbo=btn5  arm=btn7
-RSU alert listener started on UDP port 5001
-V2X CAR ROBOT READY
-[OBU] SESSION ESTABLISHED SUCCESSFULLY
+[OBU] [REG] Connecting to Desktop 192.168.0.103:8001...
+[OBU] [REG] ✓ Registration complete.  PK: 65 bytes  Peers: 1
+[OBU] [AUTH] Step 21: Timestamp OK
+[OBU] [AUTH] SESSION ESTABLISHED SUCCESSFULLY
 [OBU] OBU process exited (rc=0). Emergency clears in 5s.
 ```
 
 After OBU exits — that's **normal**. `obu_loop_count: 1` means the car authenticates once, the session stays active on the RSU for 5 minutes, and the OBU process exits cleanly.
+
+---
+
+### Normal restart (keys already exist from a previous good run)
+
+If both RSU and OBU have their `./keys/` folders, they skip registration and go straight to auth. This is fine as long as the Desktop database still has their records (i.e. Desktop was not cleared).
+
+```bash
+# Laptop: start Desktop, then RSU (same order, no key clearing needed)
+# Pi: sudo systemctl restart v2x_car
+```
 
 ---
 
@@ -98,9 +129,9 @@ After car Pi starts:
 
 | Field | Expected |
 |-------|----------|
-| ENTITIES | 1 (car registered) |
+| ENTITIES | **2** — RSU + OBU1 (car) |
 | SESSIONS ✓ | increments by 1 each service restart |
-| TS FAILURES | 0 (fixed — delta_ts_ms: 500) |
+| TS FAILURES | 0 (fixed — delta_ts_ms: 500 in both RSU and OBU configs) |
 | AVG LATENCY | ~15 ms over WiFi |
 | Events | AUTH_REQUEST → TIMESTAMP_CHECK_PASS → ... → SESSION_ESTABLISHED → POST_AUTH_RECEIVED |
 
@@ -108,7 +139,7 @@ When ambulance is also running:
 
 | Field | Expected |
 |-------|----------|
-| ENTITIES | 2 (car + ambulance) |
+| ENTITIES | **3** — RSU + OBU1 (car) + OBU2 (ambulance) |
 | Live Events | POST_AUTH_RECEIVED with emergency flag from OBU2 |
 
 ---
@@ -297,8 +328,18 @@ rm -f database/v2x_testbed.db database/master_secret.bin
 ```
 Restart RSU, then `sudo systemctl restart v2x_car`.
 
-### ENTITIES = 0 on Dashboard
-OBU didn't register with Desktop. Either Desktop wasn't running when OBU started, or Desktop was restarted and cleared registrations. Restart Desktop first, then `sudo systemctl restart v2x_car`.
+### ENTITIES = 0 on Dashboard (or "No peer public keys" OBU error)
+The OBU registered but got no RSU public key — RSU didn't register with Desktop first. Fix:
+```bash
+# Laptop: stop RSU, then:
+rm -rf ~/V2X/v2x_testbed/rsu/build/keys/
+# Also on Pi if needed:
+rm -rf ~/projects/V2X/robot_python/keys/
+
+# Then follow the full Fresh Start sequence above:
+# Desktop → RSU → Pi (in that order)
+```
+Desktop must be running before RSU starts, and RSU must register before OBU does.
 
 ### OBU keeps sending messages / won't stop
 Closing the terminal does NOT stop the service. The service runs in the background.
