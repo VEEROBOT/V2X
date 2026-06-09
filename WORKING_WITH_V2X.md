@@ -320,13 +320,26 @@ Never edit files on the laptop or ambulance directly.
 
 ## Troubleshooting
 
+### KC1 verify fail — `KC1_VERIFY_FAIL`
+RSU and OBU have mismatched keys — RSU re-registered (got new keys) but OBU still has the old RSU public key. The shared secrets don't match so KC1 fails.
+
+**Rule: if RSU keys are cleared, OBU keys must be cleared too.** They must always be in sync.
+
+Fix on the Pi:
+```bash
+rm -rf ~/projects/V2X/robot_python/keys/
+sudo systemctl restart v2x_car
+```
+OBU re-registers with Desktop and gets the RSU's current public key.
+
 ### KC2 timeout — `Timeout waiting for KC2`
 RSU has a stale session from a previous run. On the laptop:
 ```bash
 cd ~/V2X/v2x_testbed
 rm -f database/v2x_testbed.db database/master_secret.bin
+rm -rf rsu/build/keys/
 ```
-Restart RSU, then `sudo systemctl restart v2x_car`.
+Also clear OBU keys on Pi (`rm -rf ~/projects/V2X/robot_python/keys/`), then follow the full Fresh Start sequence above.
 
 ### ENTITIES = 0 on Dashboard (or "No peer public keys" OBU error)
 The OBU registered but got no RSU public key — RSU didn't register with Desktop first. Fix:
