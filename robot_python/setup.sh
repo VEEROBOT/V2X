@@ -166,7 +166,7 @@ fi
 echo "[9/11] Adding $REAL_USER to dialout group..."
 usermod -a -G dialout "$REAL_USER"
 
-# ── 10. Build OBU binary ─────────────────────────────────────────────────────
+# ── 10. Build OBU binary + generate obu_local.json ──────────────────────────
 echo "[10/11] Building OBU binary..."
 OBU_DIR="$REPO_DIR/v2x_testbed/obu"
 OBU_BIN="$OBU_DIR/build/obu_client"
@@ -180,6 +180,31 @@ if [ ! -f "$OBU_BIN" ]; then
 else
     echo "  Already built — skipping."
 fi
+
+# Generate obu_local.json — unique entity_id per device from hostname
+MY_HOSTNAME=$(hostname)
+# Sanitise: uppercase, hyphens → underscores, strip non-alphanumeric
+ENTITY_ID=$(echo "$MY_HOSTNAME" | tr '[:lower:]-' '[:upper:]_' | tr -cd 'A-Z0-9_')
+IS_EMERGENCY="false"
+if [ "$ROLE" = "ambulance" ]; then IS_EMERGENCY="true"; fi
+RSU_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.json')); print(c['rsu_ip'])" 2>/dev/null || echo "192.168.0.103")
+DESKTOP_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.json')); print(c['desktop_ip'])" 2>/dev/null || echo "192.168.0.103")
+cat > "$OBU_DIR/config/obu_local.json" << OBUEOF
+{
+    "entity_id": "${ENTITY_ID}",
+    "obu_ip": "0.0.0.0",
+    "udp_listen_port": 5003,
+    "rsu_ip": "${RSU_IP}",
+    "rsu_port": 5000,
+    "desktop_ip": "${DESKTOP_IP}",
+    "desktop_reg_port": 8001,
+    "is_emergency": ${IS_EMERGENCY},
+    "delta_ts_ms": 500,
+    "crypto_provider": "placeholder",
+    "key_directory": "./keys_${MY_HOSTNAME}/"
+}
+OBUEOF
+echo "  Generated obu_local.json  entity_id=${ENTITY_ID}  is_emergency=${IS_EMERGENCY}"
 
 # ── 11. Systemd service ──────────────────────────────────────────────────────
 echo "[11/11] Installing systemd service (v2x_$ROLE)..."

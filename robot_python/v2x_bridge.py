@@ -55,10 +55,15 @@ class V2XBridge:
         self._exit_clear_delay = exit_clear_delay_s
         self._obu_loop_count   = obu_loop_count
 
-        # Auto-detect OBU binary
+        # Auto-detect OBU binary + config
         if self._obu_binary and os.path.isfile(self._obu_binary):
-            self._manual_mode = False
-            logger.info("OBU binary found — switching to OBU mode")
+            if self._obu_config and not os.path.isfile(self._obu_config):
+                logger.error("OBU config not found: '%s' — run setup.sh to generate obu_local.json",
+                             self._obu_config)
+                self._manual_mode = True
+            else:
+                self._manual_mode = False
+                logger.info("OBU binary found — switching to OBU mode")
 
         self._emergency = False
         self._obu_proc  = None

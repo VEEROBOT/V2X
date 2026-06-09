@@ -12,6 +12,6 @@
     "key_directory": "./keys/",
     "log_level": "INFO",
 
-    "car_alert_ip": "192.168.0.100",
+    "car_alert_ip": "192.168.0.255",
     "car_alert_port": 5001
 }

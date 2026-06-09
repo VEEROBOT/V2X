@@ -73,7 +73,7 @@ position:
 
 # ── Position broadcaster (peer-to-peer UDP) ──────────────────────────────────
 position_broadcaster:
-  peer_ip: ''                    # set per device: car → ambulance IP, ambulance → car IP (not committed)
+  peer_ip: '192.168.0.255'       # subnet broadcast — all robots receive all positions
   peer_port: 5002
   broadcast_hz: 10.0
   role: car                      # override to 'ambulance' in main_ambulance.py
@@ -82,7 +82,7 @@ position_broadcaster:
 v2x_bridge:
   role: car                      # override to 'ambulance' in main_ambulance.py
   obu_binary: '../v2x_testbed/obu/build/obu_client'
-  obu_config: '../v2x_testbed/obu/config/obu1_config.json'
+  obu_config: '../v2x_testbed/obu/config/obu_local.json'
   manual_mode: false             # false = start RSU alert listener on car_alert_port
   car_alert_port: 5001           # UDP port for RSU → car alerts
   exit_clear_delay_s: 5.0
