@@ -22,12 +22,12 @@ Operational guide — how to start everything, what to expect, and how to fix it
 ### Pending — hardware
 - [ ] Build physical track (foam tiles, white/yellow tape)
 - [ ] Print 18 AprilTags (IDs 0–17, 10 cm × 10 cm) — see `TRACK_DESIGN.md`
-- [ ] Set up ambulance Pi (`sudo bash setup.sh ambulance`)
+- [x] Set up ambulance Pi (`sudo bash setup.sh ambulance`) — done, IP: 192.168.0.104
 - [ ] Calibrate `focal_px` after track is built
 - [ ] Tune HSV thresholds (`white_v_low`, `yellow_h_low/high`) under real lighting
 
 ### Pending — software
-- [ ] Set ambulance Pi IP in `config.yaml` → `position_broadcaster: peer_ip` (position sharing currently disabled — warning in logs)
+- [x] Position sharing: switched to subnet broadcast (`192.168.0.255`) — no per-device IP config needed
 - [ ] End-to-end test with real ambulance robot (currently emergency chain only tested via laptop UDP simulation)
 - [ ] LatticeProvider crypto — customer implements 12 virtual methods (placeholder works for demo)
 
@@ -44,7 +44,7 @@ Operational guide — how to start everything, what to expect, and how to fix it
 |--------|----|------|
 | Laptop | `192.168.0.103` | Runs RSU + Desktop server |
 | Car Pi | `192.168.0.100` | Runs `v2x_car` service |
-| Ambulance Pi | TBD (set during setup) | Runs `v2x_ambulance` service |
+| Ambulance Pi | `192.168.0.104` | Runs `v2x_ambulance` service |
 
 All three must be on the **same WiFi network**.
 
