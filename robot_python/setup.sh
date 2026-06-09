@@ -75,8 +75,11 @@ Pin-Priority: 1
 PINEOF
 apt-get update -qq
 apt-get install -f -y -qq                                      # fix any pre-existing broken deps
+# libcamera0.5 and libcamera-ipa from RPi repo; skip python3-picamera2 and
+# libcamera-tools — they require python3<3.12 / libjpeg62-turbo (Debian-only).
+# picamera2 is installed via pip in step 5 and works fine with Python 3.12.
 apt-get install -y -qq --allow-change-held-packages \
-    python3-picamera2 libcamera0.5 libcamera-ipa libcamera-tools
+    libcamera0.5 libcamera-ipa
 
 # ── 3. Build Python 3.12 libcamera bindings ─────────────────────────────────
 LIBCAM_SO=/usr/lib/aarch64-linux-gnu/python3.12/site-packages/libcamera/_libcamera.so
@@ -91,7 +94,8 @@ if [ ! -f "$LIBCAM_SO" ]; then
         -Dpycamera=enabled -Dcam=disabled -Dgstreamer=disabled \
         -Dipas=[] -Dpipelines=[] -Dlc-compliance=disabled \
         -Ddocumentation=disabled -Dtracing=disabled
-    cd build && ninja src/py/libcamera/pylibcamera
+    TARGET=$(ninja -C build -t targets all 2>/dev/null | grep '_libcamera.cpython.*\.so:' | head -1 | cut -d: -f1)
+    cd build && ninja ${TARGET:-}
     SITE_DIR=/usr/lib/aarch64-linux-gnu/python3.12/site-packages/libcamera
     mkdir -p "$SITE_DIR"
     cp src/py/libcamera/_libcamera*.so "$SITE_DIR/_libcamera.so"
@@ -121,11 +125,12 @@ fi
 # ── 5. Pip requirements ──────────────────────────────────────────────────────
 echo "[5/11] Installing pip requirements..."
 sudo -u "$REAL_USER" "$VENV/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"
+sudo -u "$REAL_USER" "$VENV/bin/pip" install -q picamera2
 
 # ── 6. Patch picamera2 DrmPreview (headless fix) ────────────────────────────
 echo "[6/11] Patching picamera2 for headless operation..."
 PREV_INIT=$("$VENV/bin/python3" -c \
-    "import picamera2, os; print(os.path.dirname(picamera2.__file__))" \
+    "import importlib.util, os; s=importlib.util.find_spec('picamera2'); print(os.path.dirname(s.origin)) if s else print('')" \
     2>/dev/null)/previews/__init__.py
 if [ -f "$PREV_INIT" ] && ! grep -q "DrmPreview unavailable" "$PREV_INIT"; then
     python3 - "$PREV_INIT" << 'PYEOF'
