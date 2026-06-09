@@ -81,8 +81,7 @@ class Joystick:
 
     # ── Lifecycle ────────────────────────────────────────────────────────
     def start(self) -> bool:
-        """Initialise pygame and joystick. Returns True if joystick found."""
-        # Must be set before pygame.init() on a headless Pi
+        """Initialise pygame and start joystick thread. Returns True if joystick found immediately."""
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
@@ -94,35 +93,35 @@ class Joystick:
             logger.error("pygame init failed: %s", e)
             return False
 
+        self._running = True
+        threading.Thread(target=self._loop, daemon=True, name='joystick').start()
+
+        found = self._try_connect()
+        if not found:
+            logger.warning("Joystick: no device found — will retry every 5 s")
+        return found
+
+    def _try_connect(self) -> bool:
+        """Attempt to connect to the USB joystick. Returns True if found."""
         import pygame
+        pygame.joystick.quit()
+        pygame.joystick.init()
         n = pygame.joystick.get_count()
         if n == 0:
-            logger.warning("Joystick: no device found — autonomous-only mode")
             return False
-
-        if self._dev_idx >= n:
-            logger.warning("Joystick index %d not available (%d found) — using index 0",
-                           self._dev_idx, n)
-            self._dev_idx = 0
-
+        idx = self._dev_idx if self._dev_idx < n else 0
         try:
-            self._js = pygame.joystick.Joystick(self._dev_idx)
-            self._js.init()
+            js = pygame.joystick.Joystick(idx)
+            js.init()
+            with self._lock:
+                self._js = js
+            logger.info("Joystick: '%s'  axes=%d  buttons=%d  deadman=btn%d  turbo=btn%d  arm=btn%d",
+                        js.get_name(), js.get_numaxes(), js.get_numbuttons(),
+                        self._deadman_btn, self._turbo_btn, self._arm_btn)
+            return True
         except Exception as e:
             logger.error("Joystick init error: %s", e)
             return False
-
-        logger.info("Joystick: '%s'  axes=%d  buttons=%d  deadman=btn%d  turbo=btn%d  arm=btn%d",
-                    self._js.get_name(),
-                    self._js.get_numaxes(),
-                    self._js.get_numbuttons(),
-                    self._deadman_btn,
-                    self._turbo_btn,
-                    self._arm_btn)
-
-        self._running = True
-        threading.Thread(target=self._loop, daemon=True, name='joystick').start()
-        return True
 
     def stop(self):
         self._running = False
@@ -157,8 +156,19 @@ class Joystick:
     def _loop(self):
         import pygame
         dt = 0.02   # matches time.sleep(0.02) below
+        _no_js_ticks = 0
 
         while self._running:
+            with self._lock:
+                js = self._js
+
+            if js is None:
+                _no_js_ticks += 1
+                if _no_js_ticks % 250 == 0:   # every 5 s at 50 Hz
+                    self._try_connect()
+                time.sleep(dt)
+                continue
+
             pygame.event.pump()
 
             try:
