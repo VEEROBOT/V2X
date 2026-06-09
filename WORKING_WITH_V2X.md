@@ -4,6 +4,40 @@ Operational guide — how to start everything, what to expect, and how to fix it
 
 ---
 
+## Project Status
+
+### Done
+- Car Pi: Ubuntu 24.04, libcamera, venv, systemd service (`v2x_car`) auto-starts
+- Camera: IMX219 on CSI0, 320×240 via picamera2
+- STM32 UART motor control over `/dev/ttyAMA0`
+- Joystick: deadman LB, turbo LB+RB, arm/disarm Start (btn7)
+- Lane follower: white centre-line PID
+- Emergency handler: NORMAL → EVADING → HOLDING → RESUMING → NORMAL
+- V2X chain: OBU1 ↔ RSU ↔ Desktop working (auth succeeds, 2 entities shown)
+- Timestamp tolerance fixed: `delta_ts_ms: 500` in RSU config and both OBU configs
+- `setup.sh` automated setup script for both robots
+- `TRACK_DESIGN.md`: 16×16 ft loop, 18 AprilTags, lane markings, focal_px calibration steps
+- `WORKING_WITH_V2X.md`: this file
+
+### Pending — hardware
+- [ ] Build physical track (foam tiles, white/yellow tape)
+- [ ] Print 18 AprilTags (IDs 0–17, 10 cm × 10 cm) — see `TRACK_DESIGN.md`
+- [ ] Set up ambulance Pi (`sudo bash setup.sh ambulance`)
+- [ ] Calibrate `focal_px` after track is built
+- [ ] Tune HSV thresholds (`white_v_low`, `yellow_h_low/high`) under real lighting
+
+### Pending — software
+- [ ] Set ambulance Pi IP in `config.yaml` → `position_broadcaster: peer_ip` (position sharing currently disabled — warning in logs)
+- [ ] End-to-end test with real ambulance robot (currently emergency chain only tested via laptop UDP simulation)
+- [ ] LatticeProvider crypto — customer implements 12 virtual methods (placeholder works for demo)
+
+### Known quirks
+- Keys must be cleared together: if RSU re-registers → OBU must also re-register or KC1/KC2 will fail
+- KC2 timeout = stale session in RSU DB → clear `database/` + `rsu/build/keys/` + Pi `keys/`, restart in order
+- `battery_v` in STM32 telemetry reads internal ADC reference (~4.7 V), not actual battery
+
+---
+
 ## Network Layout
 
 | Device | IP | Role |
