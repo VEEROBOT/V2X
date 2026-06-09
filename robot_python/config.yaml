@@ -73,7 +73,7 @@ position:
 
 # ── Position broadcaster (peer-to-peer UDP) ──────────────────────────────────
 position_broadcaster:
-  peer_ip: ''                    # set at runtime: car → ambulance IP, ambu → car IP
+  peer_ip: '192.168.0.104'                    # set at runtime: car → ambulance IP, ambu → car IP
   peer_port: 5002
   broadcast_hz: 10.0
   role: car                      # override to 'ambulance' in main_ambulance.py

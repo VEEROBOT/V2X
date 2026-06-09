@@ -42,16 +42,16 @@ echo "║   V2X Robot Setup — role: $ROLE"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
-# ── 1. System packages ──────────────────────────────────────────────────────
-echo "[1/11] Installing system packages..."
+# ── 1. Base packages (from Ubuntu default repos) ────────────────────────────
+echo "[1/11] Installing base packages..."
 apt-get update -qq
 apt-get install -y -qq \
-    python3-pip python3-picamera2 python3-pygame \
+    python3-pip python3-pygame \
     libcap-dev joystick \
     cmake libssl-dev build-essential \
     git curl gpg
 
-# ── 2. Raspberry Pi apt repo (for libcamera 0.5) ────────────────────────────
+# ── 2. Raspberry Pi apt repo + picamera2 + libcamera ────────────────────────
 echo "[2/11] Adding Raspberry Pi apt repo..."
 if [ ! -f /usr/share/keyrings/raspberrypi-archive-keyring.gpg ]; then
     curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
@@ -63,7 +63,7 @@ if [ ! -f /etc/apt/sources.list.d/raspi.list ]; then
         > /etc/apt/sources.list.d/raspi.list
 fi
 apt-get update -qq
-apt-get install -y -qq libcamera0.5 libcamera-ipa libcamera-tools
+apt-get install -y -qq python3-picamera2 libcamera0.5 libcamera-ipa libcamera-tools
 
 # ── 3. Build Python 3.12 libcamera bindings ─────────────────────────────────
 LIBCAM_SO=/usr/lib/aarch64-linux-gnu/python3.12/site-packages/libcamera/_libcamera.so
