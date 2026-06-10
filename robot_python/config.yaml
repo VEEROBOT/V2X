@@ -14,7 +14,7 @@
 
 # ── STM32 serial link ────────────────────────────────────────────────────────
 serial:
-  port: /dev/ttyAMA0
+  port: /dev/ttyRobot
   baudrate: 115200
 
 # ── Robot physical parameters ────────────────────────────────────────────────

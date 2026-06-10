@@ -183,15 +183,21 @@ fi
 # ── 9. dialout group + UART alias ───────────────────────────────────────────
 echo "[9/11] Adding $REAL_USER to dialout group..."
 usermod -a -G dialout "$REAL_USER"
-# RPi 5 exposes the GPIO header UART as ttyAMA10, not ttyAMA0.
-# Create a persistent symlink so config.yaml /dev/ttyAMA0 works on both RPi 4 and 5.
+# Create /dev/ttyRobot pointing to the GPIO header UART regardless of Pi model.
+# RPi 5: GPIO UART = ttyAMA10 (ttyAMA0 is an internal RP1 UART — wrong device)
+# RPi 4: GPIO UART = ttyAMA0 (ttyAMA10 does not exist)
 if [ -e /dev/ttyAMA10 ]; then
-    echo 'KERNEL=="ttyAMA10", SYMLINK+="ttyAMA0"' \
+    echo 'KERNEL=="ttyAMA10", SYMLINK+="ttyRobot"' \
         > /etc/udev/rules.d/99-uart-v2x.rules
-    udevadm control --reload-rules
-    udevadm trigger
-    echo "  Created/refreshed ttyAMA0 → ttyAMA10 symlink (RPi 5)"
+    echo "  ttyRobot → ttyAMA10 (RPi 5)"
+elif [ -e /dev/ttyAMA0 ]; then
+    echo 'KERNEL=="ttyAMA0", SYMLINK+="ttyRobot"' \
+        > /etc/udev/rules.d/99-uart-v2x.rules
+    echo "  ttyRobot → ttyAMA0 (RPi 4)"
 fi
+udevadm control --reload-rules
+udevadm trigger
+echo "  /dev/ttyRobot ready"
 
 # ── 10. Build OBU binary + generate obu_local.json ──────────────────────────
 echo "[10/11] Building OBU binary..."
