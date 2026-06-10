@@ -7,34 +7,35 @@ Operational guide — how to start everything, what to expect, and how to fix it
 ## Project Status
 
 ### Done
-- Car Pi: Ubuntu 24.04, libcamera, venv, systemd service (`v2x_car`) auto-starts
+- Car Pi + Ambulance Pi: Ubuntu 24.04, libcamera, venv, systemd service auto-starts on boot
 - Camera: IMX219 on CSI0, 320×240 via picamera2
-- STM32 UART motor control over `/dev/ttyAMA0`
-- Joystick: deadman LB, turbo LB+RB, arm/disarm Start (btn7)
+- STM32 UART motor control over `/dev/ttyRobot` (works on RPi 4 and RPi 5, any kernel)
+- Joystick: starts **disarmed** on boot → press **Start** to arm; deadman LB, turbo LB+RB
 - Lane follower: white centre-line PID
 - Emergency handler: NORMAL → EVADING → HOLDING → RESUMING → NORMAL
-- V2X chain: OBU1 ↔ RSU ↔ Desktop working (auth succeeds, 2 entities shown)
-- Timestamp tolerance fixed: `delta_ts_ms: 500` in RSU config and both OBU configs
-- `setup.sh` automated setup script for both robots
+- V2X chain: OBU ↔ RSU ↔ Desktop working (auth succeeds, 3 entities shown with both robots)
+- Timestamp tolerance fixed: `delta_ts_ms: 500` in RSU and OBU configs
+- Unified `config.yaml` with `car:` / `ambulance:` role sections — no per-device manual edits
+- `setup.sh` fully automated for both roles: venv, libcamera, udev, OBU build, service install
+- RSU emergency alert: broadcasts to `192.168.0.255` — reaches all robots automatically
 - `TRACK_DESIGN.md`: 16×16 ft loop, 18 AprilTags, lane markings, focal_px calibration steps
-- `WORKING_WITH_V2X.md`: this file
 
 ### Pending — hardware
 - [ ] Build physical track (foam tiles, white/yellow tape)
 - [ ] Print 18 AprilTags (IDs 0–17, 10 cm × 10 cm) — see `TRACK_DESIGN.md`
-- [x] Set up ambulance Pi (`sudo bash setup.sh ambulance`) — done, IP: 192.168.0.104
 - [ ] Calibrate `focal_px` after track is built
 - [ ] Tune HSV thresholds (`white_v_low`, `yellow_h_low/high`) under real lighting
 
 ### Pending — software
-- [x] Position sharing: switched to subnet broadcast (`192.168.0.255`) — no per-device IP config needed
-- [ ] End-to-end test with real ambulance robot (currently emergency chain only tested via laptop UDP simulation)
+- [ ] End-to-end V2X test with both physical robots on track
 - [ ] LatticeProvider crypto — customer implements 12 virtual methods (placeholder works for demo)
 
 ### Known quirks
 - Keys must be cleared together: if RSU re-registers → OBU must also re-register or KC1/KC2 will fail
 - KC2 timeout = stale session in RSU DB → clear `database/` + `rsu/build/keys/` + Pi `keys/`, restart in order
 - `battery_v` in STM32 telemetry reads internal ADC reference (~4.7 V), not actual battery
+- RPi 5 older kernels (≤6.8.0-1031) expose an internal RP1 UART as `/dev/ttyAMA0` with hardware loopback — fixed by using `/dev/ttyRobot` (setup.sh handles this automatically)
+- STM32 USB cable must be **unplugged** from Pi during normal operation — if connected, STM32 routes all UART responses to USB and the Pi sees nothing on ttyRobot
 
 ---
 
@@ -48,6 +49,8 @@ Operational guide — how to start everything, what to expect, and how to fix it
 
 All three must be on the **same WiFi network**.
 
+Adding more robots: give each Pi a unique hostname, run `setup.sh car` or `setup.sh ambulance` — they auto-register with a unique entity ID derived from hostname.
+
 ---
 
 ## What Runs Where
@@ -58,27 +61,29 @@ LAPTOP (192.168.0.103)
   └── RSU binary       — ./rsu_server ...         → UDP 5000 (authenticates OBUs)
                                                   → TCP 8001/8002 (entity registration)
                                                   → TCP 9000 (log receiver)
+                                                  → UDP 5001 broadcast (emergency alerts)
 
 CAR PI (192.168.0.100)
-  └── v2x_car service  — main_car.py             → auto-starts on boot
+  └── v2x_car service  — main_car.py             → auto-starts on boot, starts DISARMED
         ├── Camera (IMX219 on CSI0)
-        ├── STM32 motor controller (/dev/ttyAMA0)
-        ├── Joystick (/dev/input/js0)
-        ├── OBU client (authenticates with RSU, exits after 1 cycle)
-        └── RSU alert listener (UDP 5001 ← RSU sends EMERGENCY_ACTIVE here)
+        ├── STM32 motor controller (/dev/ttyRobot)
+        ├── Joystick (/dev/input/js0) — auto-detects, retries every 5s if not found at boot
+        ├── OBU client (authenticates once, exits — session lasts 5 min)
+        └── RSU alert listener (UDP 5001 ← RSU broadcasts EMERGENCY_ACTIVE here)
 
-AMBULANCE PI
+AMBULANCE PI (192.168.0.104)
   └── v2x_ambulance service — main_ambulance.py  → auto-starts on boot
-        └── OBU client (is_emergency: true, loops forever while service runs)
+        ├── Camera, STM32, Joystick (same as car)
+        └── OBU client (loops forever — keeps emergency active while service runs)
 ```
 
 ---
 
 ## Starting Everything
 
-### Order is critical: Desktop → RSU → Pi
+### Order is critical: Desktop → RSU → Pis
 
-The Desktop distributes public keys during registration. RSU must register with Desktop **before** OBU does — the OBU gets the RSU's public key from Desktop at registration time. Wrong order = `No peer public keys received` error and auth fails.
+The Desktop distributes public keys during registration. RSU must register with Desktop **before** OBU does.
 
 ---
 
@@ -90,7 +95,7 @@ cd ~/V2X/v2x_testbed
 rm -f database/v2x_testbed.db database/master_secret.bin
 rm -rf rsu/build/keys/
 ```
-Also on Car Pi (if keys exist from a previous run):
+Also on each Pi (if keys exist from a previous run):
 ```bash
 rm -rf ~/projects/V2X/robot_python/keys/
 ```
@@ -100,10 +105,9 @@ rm -rf ~/projects/V2X/robot_python/keys/
 **Step 1 — Laptop: start Desktop server**
 ```bash
 cd ~/V2X/v2x_testbed/desktop
-pip3 install -r requirements.txt   # first time only
 python3 server.py
 ```
-You should see:
+Expected output:
 ```
 OBU registration: port 8001
 RSU registration: port 8002
@@ -117,95 +121,90 @@ Open `http://localhost:5000` in a browser.
 cd ~/V2X/v2x_testbed/rsu/build
 ./rsu_server ../config/rsu_config.json
 ```
-RSU registers with Desktop (since keys were cleared). You should see on the Desktop terminal:
-```
-[REG] RSU registered
-```
-And RSU terminal:
+Expected:
 ```
 [RSU] ΔTS: 500 ms
-[RSU] Car alert target: 192.168.0.100:5001
+[RSU] Car alert target: 192.168.0.255:5001   ← broadcast
 ```
+Desktop terminal shows: `[REG] RSU registered`
 
 **Step 3 — Car Pi: restart service**
 ```bash
 sudo systemctl restart v2x_car
-sudo journalctl -fu v2x_car        # watch live logs
+sudo journalctl -fu v2x_car
 ```
-
-OBU registers with Desktop (since keys were cleared), gets RSU's public key, then authenticates. Expected car Pi log:
+Expected car Pi log:
 ```
-[OBU] [REG] Connecting to Desktop 192.168.0.103:8001...
 [OBU] [REG] ✓ Registration complete.  PK: 65 bytes  Peers: 1
-[OBU] [AUTH] Step 21: Timestamp OK
 [OBU] [AUTH] SESSION ESTABLISHED SUCCESSFULLY
 [OBU] OBU process exited (rc=0). Emergency clears in 5s.
+V2X CAR ROBOT READY
 ```
+Then press **Start** on the joystick to arm the car.
 
-After OBU exits — that's **normal**. `obu_loop_count: 1` means the car authenticates once, the session stays active on the RSU for 5 minutes, and the OBU process exits cleanly.
+**Step 4 — Ambulance Pi: restart service**
+```bash
+sudo systemctl restart v2x_ambulance
+sudo journalctl -fu v2x_ambulance
+```
+Expected ambulance Pi log:
+```
+[OBU] [REG] ✓ Registration complete.  PK: 65 bytes  Peers: 2
+[OBU] [AUTH] SESSION ESTABLISHED SUCCESSFULLY
+V2X AMBULANCE ROBOT READY
+```
 
 ---
 
 ### Normal restart (keys already exist from a previous good run)
 
-If both RSU and OBU have their `./keys/` folders, they skip registration and go straight to auth. This is fine as long as the Desktop database still has their records (i.e. Desktop was not cleared).
-
 ```bash
 # Laptop: start Desktop, then RSU (same order, no key clearing needed)
-# Pi: sudo systemctl restart v2x_car
+# Car Pi:
+sudo systemctl restart v2x_car
+# Ambulance Pi:
+sudo systemctl restart v2x_ambulance
 ```
 
 ---
 
 ## What to Expect on the Dashboard
 
-After car Pi starts:
+After both Pis connect:
 
 | Field | Expected |
 |-------|----------|
-| ENTITIES | **2** — RSU + OBU1 (car) |
-| SESSIONS ✓ | increments by 1 each service restart |
-| TS FAILURES | 0 (fixed — delta_ts_ms: 500 in both RSU and OBU configs) |
+| ENTITIES | **3** — RSU + Car OBU + Ambulance OBU |
+| SESSIONS ✓ | increments on each service restart |
+| TS FAILURES | 0 |
 | AVG LATENCY | ~15 ms over WiFi |
-| Events | AUTH_REQUEST → TIMESTAMP_CHECK_PASS → ... → SESSION_ESTABLISHED → POST_AUTH_RECEIVED |
-
-When ambulance is also running:
-
-| Field | Expected |
-|-------|----------|
-| ENTITIES | **3** — RSU + OBU1 (car) + OBU2 (ambulance) |
-| Live Events | POST_AUTH_RECEIVED with emergency flag from OBU2 |
+| Events | AUTH_REQUEST → TIMESTAMP_CHECK_PASS → SESSION_ESTABLISHED |
 
 ---
 
 ## Testing the Emergency Chain
 
-### Without ambulance robot (laptop simulation)
+### Full test with both robots
 
-Run this on the laptop while car service is running:
+1. Start both services (Steps 3 + 4 above)
+2. Ambulance OBU authenticates with `is_emergency: true` → RSU sends EMERGENCY_ACTIVE broadcast → car yields
+3. Car logs: `RSU ALERT: EMERGENCY ACTIVE` → `EVADING → HOLDING`
+4. `sudo systemctl stop v2x_ambulance` → emergency clears in 5 s → car logs `RESUMING → NORMAL`
+
+### Manual simulation (no ambulance robot needed)
+
+Run from laptop while car service is running:
 ```bash
 python3 -c "
 import socket, json, time
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.sendto(json.dumps({'type':'EMERGENCY_ACTIVE','session_id':'test-001'}).encode(), ('192.168.0.100', 5001))
-print('Alert sent — watch car Pi logs')
+print('Alert sent')
 time.sleep(8)
 s.sendto(json.dumps({'type':'EMERGENCY_CLEARED','session_id':'test-001'}).encode(), ('192.168.0.100', 5001))
 print('Cleared')
 "
 ```
-
-Car Pi should log:
-```
-RSU ALERT: EMERGENCY ACTIVE
-EVADING  → HOLDING  → RESUMING  → NORMAL
-```
-
-### With ambulance robot
-
-1. `sudo systemctl start v2x_ambulance` on ambulance Pi
-2. OBU2 (is_emergency: true) authenticates → RSU sends EMERGENCY_ACTIVE to car → car yields
-3. `sudo systemctl stop v2x_ambulance` → OBU stops → 5s later emergency clears → car resumes
 
 ---
 
@@ -213,14 +212,15 @@ EVADING  → HOLDING  → RESUMING  → NORMAL
 
 | Input | Action |
 |-------|--------|
-| Hold **LB** (btn 4) | Enable joystick — robot goes manual, autonomous pauses |
+| Press **Start** (btn 7) | **Arm** — robot starts moving (autonomous or joystick) |
+| Press **Start** again | **Disarm** — robot stops |
+| Hold **LB** (btn 4) | Override to joystick manual control |
 | Hold **LB + RB** (btn 4+5) | Turbo mode (0.8 m/s) |
-| Press **Start** (btn 7) | Arm / Disarm toggle |
 | Left stick Y | Forward / reverse |
 | Right stick X | Steer left / right |
-| Release LB | Return to autonomous |
+| Release LB | Return to autonomous lane following |
 
-Robot starts **armed**. Press Start to disarm (stops motors, won't move until re-armed).
+Robot starts **disarmed** on boot. Press Start once to begin. Joystick auto-connects within 5 s of the USB dongle enumerating.
 
 ---
 
@@ -235,25 +235,32 @@ sudo systemctl restart v2x_car
 sudo journalctl -fu    v2x_car          # live logs
 sudo journalctl -u     v2x_car -n 100   # last 100 lines
 
-# Manual emergency test (no OBU needed)
+# Motor + telemetry test (stop service first)
+sudo systemctl stop v2x_car
 cd ~/projects/V2X/robot_python && source .venv/bin/activate
+python3 test_driver.py    # shows live telemetry
+python3 motor_test.py     # drives forward 3 s
+
+# Manual emergency test
 python3 control_socket.py --port 5010 emergency_on
 python3 control_socket.py --port 5010 emergency_off
+python3 control_socket.py --port 5010 arm
 python3 control_socket.py --port 5010 status
+```
 
-# Camera test
+### Ambulance Pi
+```bash
+# Service control
+sudo systemctl start   v2x_ambulance
+sudo systemctl stop    v2x_ambulance
+sudo systemctl restart v2x_ambulance
+sudo journalctl -fu    v2x_ambulance
+
+# Motor + telemetry test (stop service first)
+sudo systemctl stop v2x_ambulance
 cd ~/projects/V2X/robot_python && source .venv/bin/activate
-python3 -c "
-import picamera2, time
-cam = picamera2.Picamera2()
-cam.configure(cam.create_preview_configuration(main={'size':(320,240),'format':'BGR888'}))
-cam.start(); time.sleep(2)
-cam.capture_file('/tmp/test.jpg')
-cam.stop(); print('Saved /tmp/test.jpg')
-"
-
-# Joystick mapping check
-jstest /dev/input/js0
+python3 test_driver.py
+python3 motor_test.py
 ```
 
 ### Laptop
@@ -261,9 +268,9 @@ jstest /dev/input/js0
 # Fresh start — clear old sessions before a demo
 cd ~/V2X/v2x_testbed
 rm -f database/v2x_testbed.db database/master_secret.bin
-# then restart Desktop and RSU
+rm -rf rsu/build/keys/
 
-# Check Pi clock sync (run on Pi)
+# Check clock sync on Pi (run on Pi)
 timedatectl status    # should show: System clock synchronized: yes
 ```
 
@@ -271,39 +278,50 @@ timedatectl status    # should show: System clock synchronized: yes
 
 ## Key Config Files
 
-All configs live in the repo on the Car Pi. Edit here → push → `git pull` on laptop.
+All configs live in the repo on the Car Pi. Edit here → commit → push → `git pull` on other devices.
 
 | File | Controls |
 |------|----------|
-| `robot_python/config.yaml` | Everything robot-side (speeds, camera, OBU loop count, ports) |
-| `v2x_testbed/obu/config/obu1_config.json` | Car OBU — RSU IP, Desktop IP, ports |
-| `v2x_testbed/obu/config/obu2_config.json` | Ambulance OBU — same but `is_emergency: true` |
-| `v2x_testbed/rsu/config/rsu_config.json` | RSU — car alert IP/port, timestamp tolerance |
+| `robot_python/config.yaml` | All robot settings — shared base + per-role `car:` / `ambulance:` sections |
+| `v2x_testbed/obu/config/obu_local.json` | **gitignored** — generated by `setup.sh` per device (entity_id, is_emergency) |
+| `v2x_testbed/obu/config/obu1_config.json` | OBU base — RSU IP, Desktop IP (both robots use this as template) |
+| `v2x_testbed/rsu/config/rsu_config.json` | RSU — alert broadcast IP/port, timestamp tolerance |
 
-### Critical values to know
+### config.yaml role sections
 
 ```yaml
-# config.yaml
-v2x_bridge:
-  obu_loop_count: 1    # car: authenticate once, OBU exits (session lasts 5 min)
-                       # ambulance: change to 0 (loop forever = emergency stays active)
-  manual_mode: false   # MUST be false for real V2X; true = no OBU, manual UDP only
+# Per-role settings — no manual editing needed on individual Pis
+car:
+  lane_follower:
+    linear_speed: 0.20       # m/s
+  v2x_bridge:
+    obu_loop_count: 1        # authenticate once, OBU exits (session lasts 5 min)
+  control:
+    port: 5010
+
+ambulance:
+  lane_follower:
+    linear_speed: 0.28       # m/s — faster so ambulance catches up
+  v2x_bridge:
+    obu_loop_count: 0        # loop forever — keeps emergency active
+  control:
+    port: 5011
 ```
 
 ```json
-// rsu_config.json
+// rsu_config.json — key values
 {
-  "car_alert_ip": "192.168.0.100",   // Car Pi's WiFi IP — UPDATE if Pi IP changes
+  "car_alert_ip": "192.168.0.255",   // broadcast — reaches all robots on subnet
   "car_alert_port": 5001,
-  "delta_ts_ms": 500                 // 500ms timestamp tolerance (50ms was too tight for WiFi)
+  "delta_ts_ms": 500                 // 500ms tolerance (50ms was too tight for WiFi)
 }
 ```
 
 ```json
-// obu1_config.json (car) / obu2_config.json (ambulance)
+// obu1_config.json — update if laptop IP changes
 {
-  "rsu_ip": "192.168.0.103",         // Laptop WiFi IP — UPDATE if laptop IP changes
-  "desktop_ip": "192.168.0.103"      // same laptop
+  "rsu_ip": "192.168.0.103",
+  "desktop_ip": "192.168.0.103"
 }
 ```
 
@@ -311,7 +329,7 @@ v2x_bridge:
 
 ## Git Workflow
 
-**Car Pi is the source of truth.** All changes happen here.
+**Car Pi is the source of truth.** All edits happen here.
 
 ```bash
 # On Car Pi — after any change:
@@ -319,115 +337,120 @@ git add <files>
 git commit -m "description"
 git push origin main
 
-# On Laptop:
-git pull
-
-# On Ambulance Pi (when set up):
+# On Laptop / Ambulance Pi:
 git pull
 ```
 
-Never edit files on the laptop or ambulance directly.
+Never edit files directly on the laptop or ambulance Pi.
 
 ---
 
-## Ambulance Setup (first time)
+## Adding a New Robot
 
-1. Flash Ubuntu 24.04, hostname `ambulance-robot`, SSH enabled
+1. Flash Ubuntu 24.04, set unique hostname (e.g. `v2x-car2`, `v2x-emgy2`), enable SSH
 2. `git clone https://github.com/VEEROBOT/V2X.git ~/projects/V2X`
-3. Edit OBU2 config — set RSU and Desktop IPs:
+3. Edit RSU/Desktop IPs in OBU config:
    ```bash
-   nano ~/projects/V2X/v2x_testbed/obu/config/obu2_config.json
-   # rsu_ip and desktop_ip → 192.168.0.103
+   nano ~/projects/V2X/v2x_testbed/obu/config/obu1_config.json
+   # set rsu_ip and desktop_ip → laptop IP
    ```
 4. Run setup:
    ```bash
-   sudo bash ~/projects/V2X/robot_python/setup.sh ambulance
+   sudo bash ~/projects/V2X/robot_python/setup.sh car    # or: ambulance
    sudo reboot
    ```
+
+`setup.sh` generates `obu_local.json` automatically (unique entity_id from hostname, correct `is_emergency` flag). No other manual edits needed. The robot auto-registers with the RSU on first boot.
 
 ---
 
 ## Troubleshooting
 
 ### KC1 verify fail — `KC1_VERIFY_FAIL`
-RSU and OBU have mismatched keys — RSU re-registered (got new keys) but OBU still has the old RSU public key. The shared secrets don't match so KC1 fails.
+RSU re-registered (got new keys) but OBU still has the old RSU public key.
 
-**Rule: if RSU keys are cleared, OBU keys must be cleared too.** They must always be in sync.
+**Rule: if RSU keys are cleared, clear OBU keys on all Pis too.**
 
-Fix on the Pi:
 ```bash
 rm -rf ~/projects/V2X/robot_python/keys/
-sudo systemctl restart v2x_car
+sudo systemctl restart v2x_car   # or v2x_ambulance
 ```
-OBU re-registers with Desktop and gets the RSU's current public key.
 
 ### KC2 timeout — `Timeout waiting for KC2`
-RSU has a stale session from a previous run. On the laptop:
+RSU has a stale session. Full clear on laptop:
 ```bash
 cd ~/V2X/v2x_testbed
 rm -f database/v2x_testbed.db database/master_secret.bin
 rm -rf rsu/build/keys/
 ```
-Also clear OBU keys on Pi (`rm -rf ~/projects/V2X/robot_python/keys/`), then follow the full Fresh Start sequence above.
+Also clear OBU keys on each Pi. Then follow the full Fresh Start sequence.
 
-### ENTITIES = 0 on Dashboard (or "No peer public keys" OBU error)
-The OBU registered but got no RSU public key — RSU didn't register with Desktop first. Fix:
+### ENTITIES = 0 on Dashboard
+RSU registered with Desktop before Desktop was running, or OBU registered before RSU. Always start in order: Desktop → RSU → Pis.
 ```bash
-# Laptop: stop RSU, then:
 rm -rf ~/V2X/v2x_testbed/rsu/build/keys/
-# Also on Pi if needed:
 rm -rf ~/projects/V2X/robot_python/keys/
-
-# Then follow the full Fresh Start sequence above:
-# Desktop → RSU → Pi (in that order)
-```
-Desktop must be running before RSU starts, and RSU must register before OBU does.
-
-### OBU keeps sending messages / won't stop
-Closing the terminal does NOT stop the service. The service runs in the background.
-```bash
-sudo systemctl stop v2x_car
+# Then: Desktop → RSU → Pi
 ```
 
-### TIMESTAMP_CHECK_FAIL in RSU logs
-Fixed — `delta_ts_ms` was raised from 50 → 500 in `rsu_config.json`. If this appears again, verify the laptop did `git pull` and RSU was restarted.
-
-### Camera not working
+### TIMESTAMP_CHECK_FAIL
+`delta_ts_ms` in `rsu_config.json` is too tight or the laptop didn't `git pull`.
 ```bash
-dmesg | grep imx219          # should show: registered
-# ribbon cable must be in CAM/DISP 0 (not port 1)
+# Laptop:
+cd ~/V2X && git pull
+# Restart RSU
 ```
 
-### STM32 not connecting — serial errors
+### Robot doesn't move after boot
+Normal — robot starts **disarmed**. Press **Start** button (btn 7) on joystick to arm.
+Or arm via socket:
 ```bash
-ls -la /dev/ttyAMA0          # must exist
+cd ~/projects/V2X/robot_python && source .venv/bin/activate
+python3 control_socket.py --port 5010 arm   # car
+python3 control_socket.py --port 5011 arm   # ambulance
+```
+
+### Joystick not detected at boot
+The USB receiver takes a few seconds to enumerate. The joystick thread retries every 5 s — wait 10 s after boot before testing. Check detection:
+```bash
+ls /dev/input/js0
+```
+If missing, unplug and replug the USB dongle.
+
+### STM32 not responding (`test_driver.py` returns `None`)
+```bash
+ls -la /dev/ttyRobot         # must exist (symlink to ttyAMA10 on RPi 5)
 groups                       # must include: dialout
-sudo usermod -aG dialout veerobot && newgrp dialout   # if missing
+```
+If ttyRobot is missing, re-apply the udev rule:
+```bash
+echo 'KERNEL=="ttyAMA10", SYMLINK+="ttyRobot"' | sudo tee /etc/udev/rules.d/99-uart-v2x.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-### STM32 responds on USB but not UART (`test_driver.py` returns `None`)
-If the STM32's USB cable is plugged into the Pi at the same time as the UART wires,
-the STM32 sends all responses to USB instead of UART3 — the Pi sees nothing on `/dev/ttyAMA0`.
-**Fix: unplug the USB cable from the STM32 board.** Only connect UART (TX/RX/GND wires).
-The USB connection is only needed when flashing firmware via STM32CubeIDE.
+### STM32 responds on USB but not UART (`test_driver.py` returns `None` or loopback)
+The STM32 USB cable is plugged into the Pi. When USB is connected, STM32 routes all UART responses to USB.
+**Fix: unplug the USB cable from the STM32 board.** Only UART TX/RX/GND wires should be connected.
 
-### RSU alert not received on car (no EVADING in logs)
+### STM32 `Telemetry size mismatch: got 0, expected 70`
+The Pi is receiving its own transmitted bytes back (hardware loopback). On RPi 5 with older kernel (≤1031), `/dev/ttyAMA0` is an internal RP1 UART with loopback — not the GPIO UART. Using `/dev/ttyRobot` (which points to `ttyAMA10`) fixes this.
+
+### RSU alert not received (no EVADING in car logs)
 ```bash
 sudo journalctl -u v2x_car | grep "RSU alert listener"
 # must show: RSU alert listener started on UDP port 5001
 ```
-If not: check `v2x_bridge: manual_mode: false` in `config.yaml`.
-Also verify RSU config `car_alert_ip` is `192.168.0.100` (not `car-robot.local`).
+Check `v2x_bridge: manual_mode: false` in `config.yaml`.
+RSU broadcasts to `192.168.0.255` — car must be on the same subnet.
 
-### Robot doesn't move / stays stopped
-Press **Start** button (btn 7) to arm. Or:
+### Camera not working
 ```bash
-cd ~/projects/V2X/robot_python && source .venv/bin/activate
-python3 control_socket.py --port 5010 arm
+dmesg | grep imx219    # should show: registered
+# ribbon cable must be in CAM/DISP 0 (not port 1)
 ```
 
 ### Battery voltage shows ~4.7V in logs
-This is **normal** — it reads the STM32's internal ADC reference voltage, not the actual battery. Ignore this value.
+Normal — STM32 reads its internal ADC reference voltage, not the actual battery. Ignore.
 
 ---
 
@@ -437,9 +460,9 @@ This is **normal** — it reads the STM32's internal ADC reference voltage, not 
 |------|----------|-----------|---------|
 | 5000 (UDP) | UDP | OBU → RSU | V2X authentication |
 | 5000 (HTTP) | HTTP | Browser → Desktop | Dashboard UI |
-| 5001 | UDP | RSU → Car Pi | Emergency alerts |
-| 5002 | UDP | Car ↔ Ambulance | Position sharing |
-| 5003 | UDP | OBU1 listen | Car OBU receive port |
+| 5001 | UDP | RSU → all robots | Emergency alert broadcast |
+| 5002 | UDP | Car ↔ Ambulance | Position sharing (subnet broadcast) |
+| 5003 | UDP | OBU listen | OBU receive port |
 | 5010 | UDP | Local | Car control socket (arm/disarm/estop) |
 | 5011 | UDP | Local | Ambulance control socket |
 | 8001 | TCP | OBU → Desktop | OBU entity registration |
