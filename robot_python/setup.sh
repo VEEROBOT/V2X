@@ -185,12 +185,12 @@ echo "[9/11] Adding $REAL_USER to dialout group..."
 usermod -a -G dialout "$REAL_USER"
 # RPi 5 exposes the GPIO header UART as ttyAMA10, not ttyAMA0.
 # Create a persistent symlink so config.yaml /dev/ttyAMA0 works on both RPi 4 and 5.
-if [ ! -e /dev/ttyAMA0 ] && [ -e /dev/ttyAMA10 ]; then
+if [ -e /dev/ttyAMA10 ]; then
     echo 'KERNEL=="ttyAMA10", SYMLINK+="ttyAMA0"' \
         > /etc/udev/rules.d/99-uart-v2x.rules
     udevadm control --reload-rules
     udevadm trigger
-    echo "  Created ttyAMA0 → ttyAMA10 symlink (RPi 5)"
+    echo "  Created/refreshed ttyAMA0 → ttyAMA10 symlink (RPi 5)"
 fi
 
 # ── 10. Build OBU binary + generate obu_local.json ──────────────────────────
