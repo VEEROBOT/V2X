@@ -9,9 +9,9 @@ Two operation modes selected at startup:
     Useful for integration testing without real V2X hardware.
 
   OBU (manual_mode=False or auto-detected when obu_binary path exists):
-    Spawns ./obu_client <config> --loop <obu_loop_count> as a subprocess.
+    Spawns ./obu_client <config> --loop 1 as a subprocess.
     Car:       obu_loop_count=1  — authenticate once, session lasts 300s, OBU exits.
-    Ambulance: obu_loop_count=0  — loop forever until service is stopped.
+    Ambulance: obu_loop_count=0  — re-authenticates every ~300s to keep emergency active.
     Ambulance: OBU authenticates with RSU → RSU sends UDP alert to car.
     Car: listens on car_alert_port for RSU JSON notifications.
 
@@ -112,13 +112,16 @@ class V2XBridge:
                          self._obu_binary)
             self._manual_mode = True
             return
+        if not self._spawn_obu_process():
+            self._manual_mode = True
+            return
+        threading.Thread(target=self._tail_obu, daemon=True, name='obu_tail').start()
 
+    def _spawn_obu_process(self) -> bool:
         cmd = [self._obu_binary]
         if self._obu_config:
             cmd.append(self._obu_config)
-        loop = '999999' if self._obu_loop_count <= 0 else str(self._obu_loop_count)
-        cmd += ['--loop', loop]
-
+        cmd += ['--loop', '1']   # always one auth cycle per spawn; restart handled below
         logger.info("Starting OBU: %s", ' '.join(cmd))
         try:
             self._obu_proc = subprocess.Popen(
@@ -128,30 +131,45 @@ class V2XBridge:
                 text=True,
                 bufsize=1,
             )
-            threading.Thread(target=self._tail_obu, daemon=True, name='obu_tail').start()
             logger.info("OBU process started  pid=%d", self._obu_proc.pid)
+            return True
         except Exception as e:
             logger.error("Failed to start OBU: %s — falling back to manual mode", e)
-            self._manual_mode = True
+            return False
 
     def _tail_obu(self):
-        for line in self._obu_proc.stdout:
+        while True:
+            for line in self._obu_proc.stdout:
+                if not self._running:
+                    break
+                line = line.rstrip()
+                if line:
+                    logger.info("[OBU] %s", line)
+                if _OBU_EMERGENCY_SENT in line:
+                    if not self._emergency:
+                        logger.warning("Emergency V2X signal confirmed by OBU")
+                    self._emergency = True
+                elif _OBU_AUTH_FAILED in line:
+                    logger.error("OBU auth failed: %s", line)
+
+            rc = self._obu_proc.wait()
             if not self._running:
                 break
-            line = line.rstrip()
-            if line:
-                logger.info("[OBU] %s", line)
-            if _OBU_EMERGENCY_SENT in line:
-                if not self._emergency:
-                    logger.warning("Emergency V2X signal confirmed by OBU")
-                self._emergency = True
-            elif _OBU_AUTH_FAILED in line:
-                logger.error("OBU auth failed: %s", line)
+
+            if self._obu_loop_count > 0:
+                # Car: one auth then stop — session lasts 300s, no restart needed
+                break
+
+            # Ambulance (obu_loop_count=0): restart to keep emergency active
+            logger.info("OBU session ended (rc=%d), restarting in 2s...", rc)
+            time.sleep(2.0)
+            if not self._running:
+                break
+            if not self._spawn_obu_process():
+                break
 
         if self._running:
-            rc = self._obu_proc.wait()
-            logger.warning("OBU process exited (rc=%d). Emergency clears in %.0fs.",
-                           rc, self._exit_clear_delay)
+            logger.warning("OBU stopped. Emergency clears in %.0fs.", self._exit_clear_delay)
             time.sleep(self._exit_clear_delay)
             if self._emergency:
                 logger.info("Clearing emergency after OBU exit")
