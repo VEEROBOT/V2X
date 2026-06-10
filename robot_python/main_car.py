@@ -49,9 +49,21 @@ logging.basicConfig(
 logger = logging.getLogger('car')
 
 
-def load_config(path: str) -> dict:
+def _deep_merge(base: dict, override: dict):
+    for k, v in override.items():
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
+
+def load_config(path: str, role: str = '') -> dict:
     with open(path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    if role and role in cfg:
+        _deep_merge(cfg, cfg[role])
+    for r in ('car', 'ambulance'):
+        cfg.pop(r, None)
+    return cfg
 
 
 def main():
@@ -69,7 +81,7 @@ def main():
                     help='Override serial port (e.g. /dev/ttyUSB0)')
     args = ap.parse_args()
 
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, 'car')
 
     # ── Robot driver (STM32 via UART) ─────────────────────────────────────
     rc = cfg['robot']

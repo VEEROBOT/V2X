@@ -339,12 +339,7 @@ Never edit files on the laptop or ambulance directly.
    nano ~/projects/V2X/v2x_testbed/obu/config/obu2_config.json
    # rsu_ip and desktop_ip → 192.168.0.103
    ```
-4. Edit `config.yaml` — set ambulance to loop forever:
-   ```bash
-   nano ~/projects/V2X/robot_python/config.yaml
-   # v2x_bridge: obu_loop_count: 0
-   ```
-5. Run setup:
+4. Run setup:
    ```bash
    sudo bash ~/projects/V2X/robot_python/setup.sh ambulance
    sudo reboot

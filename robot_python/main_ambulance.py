@@ -41,12 +41,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ambulance')
 
-_AMBULANCE_SPEED = 0.28   # m/s — faster than car so it catches up from behind
+def _deep_merge(base: dict, override: dict):
+    for k, v in override.items():
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
 
-
-def load_config(path: str) -> dict:
+def load_config(path: str, role: str = '') -> dict:
     with open(path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    if role and role in cfg:
+        _deep_merge(cfg, cfg[role])
+    for r in ('car', 'ambulance'):
+        cfg.pop(r, None)
+    return cfg
 
 
 def main():
@@ -61,7 +70,7 @@ def main():
     ap.add_argument('--serial-port',    default='')
     args = ap.parse_args()
 
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, 'ambulance')
 
     # ── Robot driver ─────────────────────────────────────────────────────
     rc = cfg['robot']
@@ -104,10 +113,10 @@ def main():
     )
     joystick.start()
 
-    # ── Lane follower (faster speed for ambulance) ────────────────────────
+    # ── Lane follower ─────────────────────────────────────────────────────
     lc = cfg['lane_follower']
     follower = LaneFollower(
-        linear_speed=_AMBULANCE_SPEED,
+        linear_speed=lc['linear_speed'],
         max_angular_speed=lc['max_angular_speed'],
         crop_top_ratio=lc['crop_top_ratio'],
         min_contour_area=lc['min_contour_area'],
@@ -155,7 +164,7 @@ def main():
     bridge.start()
 
     # ── Control socket ────────────────────────────────────────────────────
-    ctrl = ControlSocket(port=5011)
+    ctrl = ControlSocket(port=cfg['control']['port'])
     ctrl.register('emergency_on',  lambda: bridge.set_emergency(True))
     ctrl.register('emergency_off', lambda: bridge.set_emergency(False))
     ctrl.register('arm',           driver.arm)
@@ -168,7 +177,7 @@ def main():
     logger.info("╔══════════════════════════════════════════════════════╗")
     logger.info("║         V2X AMBULANCE ROBOT READY                    ║")
     logger.info("║  Lane following  : ACTIVE  (%.2f m/s)                 ║",
-                _AMBULANCE_SPEED)
+                lc['linear_speed'])
     logger.info("║  Joystick        : %s",
                 "CONNECTED (hold btn%d to drive)" % jc.get('deadman_button', 5)
                 if joystick.connected() else "not found — autonomous only          ║")

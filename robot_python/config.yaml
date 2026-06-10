@@ -127,4 +127,23 @@ joystick:
 #   {"cmd": "estop"}          — emergency stop
 #   {"cmd": "status"}         — print status to stdout
 control:
-  port: 5010                    # car listens on 5010, ambulance on 5011
+  port: 5010                    # overridden per role below
+
+# ── Per-role overrides ────────────────────────────────────────────────────────
+# main_car.py and main_ambulance.py deep-merge their section over the base above.
+# Add any per-robot tuning here — no manual edits needed on individual Pis.
+car:
+  lane_follower:
+    linear_speed: 0.20          # m/s
+  v2x_bridge:
+    obu_loop_count: 1           # authenticate once, OBU exits (session lasts 300s)
+  control:
+    port: 5010
+
+ambulance:
+  lane_follower:
+    linear_speed: 0.28          # m/s — faster so ambulance catches up from behind
+  v2x_bridge:
+    obu_loop_count: 0           # loop forever — keeps emergency active while service runs
+  control:
+    port: 5011
