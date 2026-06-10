@@ -14,7 +14,8 @@
 #   8. Configures /boot/firmware/cmdline.txt (removes serial console)
 #   9. Adds user to dialout group
 #  10. Builds OBU binary (V2X authentication)
-#  11. Installs and enables systemd service
+#  11. Installs CLI commands (v2x_run_car, v2x_run_ambulance)
+#  12. Installs and enables systemd service
 #
 # After running: sudo reboot
 
@@ -239,8 +240,15 @@ cat > "$OBU_DIR/config/obu_local.json" << OBUEOF
 OBUEOF
 echo "  Generated obu_local.json  entity_id=${ENTITY_ID}  is_emergency=${IS_EMERGENCY}"
 
-# ── 11. Systemd service ──────────────────────────────────────────────────────
-echo "[11/11] Installing systemd service (v2x_$ROLE)..."
+# ── 11. CLI commands ─────────────────────────────────────────────────────────
+echo "[11/12] Installing CLI commands..."
+chmod +x "$SCRIPT_DIR/v2x_run_car.sh" "$SCRIPT_DIR/v2x_run_ambulance.sh"
+ln -sf "$SCRIPT_DIR/v2x_run_car.sh"       /usr/local/bin/v2x_run_car
+ln -sf "$SCRIPT_DIR/v2x_run_ambulance.sh" /usr/local/bin/v2x_run_ambulance
+echo "  v2x_run_car / v2x_run_ambulance → /usr/local/bin/"
+
+# ── 12. Systemd service ──────────────────────────────────────────────────────
+echo "[12/12] Installing systemd service (v2x_$ROLE)..."
 SERVICE_SRC="$SCRIPT_DIR/v2x_${ROLE}.service"
 SERVICE_DST="/etc/systemd/system/v2x_${ROLE}.service"
 if [ ! -f "$SERVICE_SRC" ]; then
