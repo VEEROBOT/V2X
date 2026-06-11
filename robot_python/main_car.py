@@ -76,6 +76,16 @@ def _push_stream(streamer, full_frame, roi_panels, crop_y,
     cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
 
+    # AprilTag overlay (x-coords ×2 because top panel is 2× wider than source)
+    corners, ids = estimator.get_last_detections()
+    for pts, tag_id in zip(corners, ids):
+        scaled = (pts[0] * [2, 1]).astype(np.int32)
+        color  = (0, 255, 0) if tag_id < estimator._n_inner else (0, 165, 255)
+        cv2.polylines(top, [scaled], True, color, 2)
+        cx, cy = scaled.mean(axis=0).astype(int)
+        cv2.putText(top, str(tag_id), (cx - 6, cy + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
     # Middle row: lane overlay + HSV mask panels from LaneFollower
     if roi_panels is not None:
         mid = roi_panels
@@ -282,7 +292,7 @@ def main():
 
             if streamer and frame is not None:
                 now = time.monotonic()
-                if now - _last_stream_t >= 0.10:
+                if now - _last_stream_t >= 0.04:
                     _last_stream_t = now
                     panels = follower.get_roi_panels()
                     _push_stream(streamer, frame, panels, _crop_y,

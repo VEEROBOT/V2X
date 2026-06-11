@@ -23,7 +23,6 @@ _HTML = b"""<!DOCTYPE html>
 <html>
 <head>
   <title>Robot Vision</title>
-  <meta http-equiv="refresh" content="0">
   <style>
     body { background:#111; margin:0; display:flex; flex-direction:column;
            align-items:center; justify-content:center; min-height:100vh; color:#aaa;
@@ -117,7 +116,7 @@ class StreamServer:
                                 b'Content-Type: image/jpeg\r\n\r\n'
                                 + jpeg + b'\r\n'
                             )
-                        time.sleep(0.1)   # ~10 fps to desktop
+                        time.sleep(0.04)  # ~25 fps to desktop
                 except (BrokenPipeError, ConnectionResetError):
                     pass
 

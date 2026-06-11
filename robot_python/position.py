@@ -45,10 +45,12 @@ class PositionEstimator:
         self._every_n    = detect_every_n
         self._debug      = debug
 
-        self._frame_cnt  = 0
-        self._last_zone  = -1
-        self._last_dist  = 0.0
-        self._off_track  = False
+        self._frame_cnt     = 0
+        self._last_zone     = -1
+        self._last_dist     = 0.0
+        self._off_track     = False
+        self._last_corners  = []   # all corners from last detection frame
+        self._last_ids      = []   # matching IDs
 
         # AprilTag 36h11 — compatible with OpenCV 4.5.x and 4.7+
         self._aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
@@ -71,7 +73,12 @@ class PositionEstimator:
             gray, self._aruco_dict, parameters=self._aruco_params)
 
         if ids is None or len(ids) == 0:
+            self._last_corners = []
+            self._last_ids     = []
             return
+
+        self._last_corners = corners
+        self._last_ids     = [int(i[0]) for i in ids]
 
         # Pick largest (closest) tag
         best_idx  = 0
@@ -124,3 +131,7 @@ class PositionEstimator:
     def is_off_track(self) -> bool:
         """True when the last detected tag was an outer reference tag."""
         return self._off_track
+
+    def get_last_detections(self):
+        """Returns (corners_list, ids_list) from the most recent detection frame."""
+        return self._last_corners, self._last_ids
