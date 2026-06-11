@@ -277,11 +277,21 @@ def main():
                     driver.disarm()
                     logger.info("*** DISARMED (Start button) ***")
 
-            if not _robot_armed:
-                time.sleep(0.02)
-                continue
-
+            # ── Camera grab + stream — always runs regardless of arm state ──
             frame = cam.get_frame()
+
+            if streamer and frame is not None:
+                now = time.monotonic()
+                if now - _last_stream_t >= 0.10:
+                    _last_stream_t = now
+                    panels = follower.get_roi_panels()
+                    _push_stream(streamer, frame, panels, _crop_y,
+                                 estimator, handler, _stream_vx, _stream_wz)
+
+            if not _robot_armed:
+                if frame is None:
+                    time.sleep(0.02)
+                continue
 
             if frame is not None:
                 # Position update (runs on every Nth frame inside estimator)
@@ -310,15 +320,6 @@ def main():
 
             driver.set_velocity(vx, wz)
             _stream_vx, _stream_wz = vx, wz
-
-            # Push ~10 fps to desktop browser
-            if streamer and frame is not None:
-                now = time.monotonic()
-                if now - _last_stream_t >= 0.10:
-                    _last_stream_t = now
-                    panels = follower.get_roi_panels()
-                    _push_stream(streamer, frame, panels, _crop_y,
-                                 estimator, handler, _stream_vx, _stream_wz)
 
             if frame is None:
                 time.sleep(0.02)  # ~50 Hz when no camera

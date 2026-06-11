@@ -15,7 +15,7 @@
 
 # ── STM32 serial link ────────────────────────────────────────────────────────
 serial:
-  port: /dev/ttyRobot
+  port: /dev/ttyAMA0
   baudrate: 115200
 
 # ── Robot physical parameters ────────────────────────────────────────────────
@@ -37,7 +37,7 @@ camera:
 lane_follower:
   linear_speed: 0.20             # m/s — car default (ambulance overrides to 0.28)
   max_angular_speed: 1.2         # rad/s
-  crop_top_ratio: 0.40           # 30deg tilt / 350mm height → sees road 0.25–0.75m ahead
+  crop_top_ratio: 0.30           # 30deg tilt / 350mm height → sees road 0.25–0.95m ahead (covers full 1019mm track width)
   min_contour_area: 150          # px² — filters noise; handles thin yellow bars
 
   kp: 0.005
