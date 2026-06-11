@@ -40,6 +40,7 @@ from position_broadcaster import PositionBroadcaster
 from v2x_bridge           import V2XBridge
 from emergency_handler    import EmergencyHandler
 from control_socket       import ControlSocket
+from stream_server        import StreamServer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,6 +65,37 @@ def load_config(path: str, role: str = '') -> dict:
     for r in ('car', 'ambulance'):
         cfg.pop(r, None)
     return cfg
+
+
+def _push_stream(streamer, full_frame, roi_panels, crop_y,
+                 estimator, handler, vx, wz):
+    import cv2, numpy as np
+    # Top row: full camera frame (scaled 2× wider) with crop boundary
+    top = cv2.resize(full_frame, (640, full_frame.shape[0]))
+    cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
+    cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
+
+    # Middle row: lane overlay + HSV mask panels from LaneFollower
+    if roi_panels is not None:
+        mid = roi_panels
+    else:
+        mid = np.zeros((full_frame.shape[0] - crop_y, 640, 3), np.uint8)
+
+    # Status bar
+    pos   = estimator.get_position()
+    zone  = pos['zone'] if pos else -1
+    off   = pos.get('off_track', False) if pos else False
+    state = handler.get_state()
+    emg   = state != 'NORMAL'
+    bar   = np.zeros((22, 640, 3), np.uint8)
+    col   = (0, 50, 200) if emg else (0, 200, 50)
+    parts = [f"zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", state]
+    if off:  parts.append("OFF-TRACK")
+    cv2.putText(bar, "  ".join(parts), (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1)
+
+    streamer.push_frame(np.vstack([top, mid, bar]))
 
 
 def main():
@@ -192,6 +224,13 @@ def main():
         position_timeout_s=ec['position_timeout_s'],
     )
 
+    # ── Vision stream (desktop browser) ──────────────────────────────────
+    sc = cfg.get('stream', {})
+    streamer = None
+    if sc.get('enabled', False):
+        streamer = StreamServer(port=sc.get('port', 5005))
+        streamer.start()
+
     # ── Control socket (manual test without OBU) ──────────────────────────
     ctrl = ControlSocket(port=cfg['control']['port'])
     ctrl.register('emergency_on',  lambda: bridge.set_emergency(True))
@@ -219,7 +258,11 @@ def main():
         sys.exit(0)
     signal.signal(signal.SIGTERM, _sigterm)
 
-    _robot_armed = False   # starts disarmed; press Start to arm
+    _robot_armed     = False   # starts disarmed; press Start to arm
+    _stream_vx       = 0.0
+    _stream_wz       = 0.0
+    _last_stream_t   = 0.0
+    _crop_y          = int(lc['crop_top_ratio'] * cc['height'])
 
     try:
         while True:
@@ -266,6 +309,16 @@ def main():
                 vx, wz = 0.0, 0.0
 
             driver.set_velocity(vx, wz)
+            _stream_vx, _stream_wz = vx, wz
+
+            # Push ~10 fps to desktop browser
+            if streamer and frame is not None:
+                now = time.monotonic()
+                if now - _last_stream_t >= 0.10:
+                    _last_stream_t = now
+                    panels = follower.get_roi_panels()
+                    _push_stream(streamer, frame, panels, _crop_y,
+                                 estimator, handler, _stream_vx, _stream_wz)
 
             if frame is None:
                 time.sleep(0.02)  # ~50 Hz when no camera
@@ -281,6 +334,8 @@ def main():
         broadcaster.stop()
         joystick.stop()
         ctrl.stop()
+        if streamer:
+            streamer.stop()
         cam.stop()
 
 

@@ -33,6 +33,7 @@ from position             import PositionEstimator
 from position_broadcaster import PositionBroadcaster
 from v2x_bridge           import V2XBridge
 from control_socket       import ControlSocket
+from stream_server        import StreamServer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +57,31 @@ def load_config(path: str, role: str = '') -> dict:
     for r in ('car', 'ambulance'):
         cfg.pop(r, None)
     return cfg
+
+
+def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
+                     estimator, vx, wz):
+    import cv2, numpy as np
+    top = cv2.resize(full_frame, (640, full_frame.shape[0]))
+    cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
+    cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
+
+    if roi_panels is not None:
+        mid = roi_panels
+    else:
+        mid = np.zeros((full_frame.shape[0] - crop_y, 640, 3), np.uint8)
+
+    pos  = estimator.get_position()
+    zone = pos['zone'] if pos else -1
+    off  = pos.get('off_track', False) if pos else False
+    bar  = np.zeros((22, 640, 3), np.uint8)
+    parts = [f"zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", "AMBULANCE"]
+    if off: parts.append("OFF-TRACK")
+    cv2.putText(bar, "  ".join(parts), (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 200), 1)
+
+    streamer.push_frame(np.vstack([top, mid, bar]))
 
 
 def main():
@@ -164,6 +190,13 @@ def main():
     )
     bridge.start()
 
+    # ── Vision stream (desktop browser) ──────────────────────────────────
+    sc = cfg.get('stream', {})
+    streamer = None
+    if sc.get('enabled', False):
+        streamer = StreamServer(port=sc.get('port', 5005))
+        streamer.start()
+
     # ── Control socket ────────────────────────────────────────────────────
     ctrl = ControlSocket(port=cfg['control']['port'])
     ctrl.register('emergency_on',  lambda: bridge.set_emergency(True))
@@ -186,6 +219,9 @@ def main():
     logger.info("╚══════════════════════════════════════════════════════╝")
     logger.info("")
 
+    _last_stream_t = 0.0
+    _crop_y        = int(lc['crop_top_ratio'] * cc['height'])
+
     try:
         while True:
             frame = cam.get_frame()
@@ -207,6 +243,15 @@ def main():
 
             driver.set_velocity(vx, wz)
 
+            # Push ~10 fps to desktop browser
+            if streamer:
+                now = time.monotonic()
+                if now - _last_stream_t >= 0.10:
+                    _last_stream_t = now
+                    panels = follower.get_roi_panels()
+                    _push_stream_amb(streamer, frame, panels, _crop_y,
+                                     estimator, vx, wz)
+
     except KeyboardInterrupt:
         logger.info("Shutting down…")
     finally:
@@ -218,6 +263,8 @@ def main():
         broadcaster.stop()
         joystick.stop()
         ctrl.stop()
+        if streamer:
+            streamer.stop()
         cam.stop()
 
 

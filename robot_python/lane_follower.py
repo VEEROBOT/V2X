@@ -58,6 +58,12 @@ class LaneFollower:
         self._integral      = 0.0
         self._last_time     = time.monotonic()
 
+        # Stream support — updated each processed frame
+        self._last_roi    = None
+        self._last_cx     = None
+        self._last_mask_w = None   # white HSV mask (uint8 single-channel)
+        self._last_mask_y = None   # yellow HSV mask
+
     def process(self, frame) -> Tuple[float, float]:
         """
         Process one BGR frame.  Returns (vx_m_s, wz_rad_s).
@@ -65,8 +71,10 @@ class LaneFollower:
         """
         h, w = frame.shape[:2]
         roi  = frame[int(h * self._crop_top):, :]
+        self._last_roi = roi
 
         cx = self._find_centroid(roi)
+        self._last_cx = cx
 
         if cx is None:
             if self._debug:
@@ -101,10 +109,12 @@ class LaneFollower:
     # ── Private ─────────────────────────────────────────────────────────────
     def _find_centroid(self, roi) -> Optional[float]:
         hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, self._white_lo, self._white_hi) | \
-               cv2.inRange(hsv, self._yellow_lo, self._yellow_hi)
-        mask = cv2.erode(mask,  None, iterations=2)
-        mask = cv2.dilate(mask, None, iterations=2)
+        mw   = cv2.inRange(hsv, self._white_lo,  self._white_hi)
+        my   = cv2.inRange(hsv, self._yellow_lo, self._yellow_hi)
+        self._last_mask_w = mw
+        self._last_mask_y = my
+        mask = cv2.erode(mw | my, None, iterations=2)
+        mask = cv2.dilate(mask,   None, iterations=2)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
@@ -121,6 +131,46 @@ class LaneFollower:
                 total_m10 += M['m10']
 
         return (total_m10 / total_m00) if total_m00 > 0 else None
+
+    def get_roi_panels(self) -> Optional[np.ndarray]:
+        """
+        Return a side-by-side (640 × roi_h) BGR image for streaming:
+          Left  320 px — annotated ROI (centre line / target / centroid)
+          Right 320 px — HSV mask (white pixels white, yellow pixels yellow)
+        Returns None until the first frame is processed.
+        """
+        if self._last_roi is None:
+            return None
+
+        roi = self._last_roi
+        h, w = roi.shape[:2]
+        target = int(w / 2 + self._lane_offset)
+
+        # ── Left panel: lane overlay ─────────────────────────────────────
+        left = roi.copy()
+        cv2.line(left, (w // 2, 0), (w // 2, h), (0, 200, 0),   1)   # green  = centre
+        cv2.line(left, (target,  0), (target,  h), (0, 165, 255), 1)  # orange = target
+        if self._last_cx is not None:
+            cv2.circle(left, (int(self._last_cx), h // 2), 6, (0, 0, 255), -1)
+            err = int(self._last_cx - target)
+            cv2.putText(left, f"err={err:+d}px", (2, 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
+        else:
+            cv2.putText(left, "NO LINE", (2, h // 2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
+        cv2.putText(left, "LANE", (2, h - 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
+
+        # ── Right panel: coloured HSV mask ───────────────────────────────
+        right = np.zeros_like(roi)
+        if self._last_mask_w is not None:
+            right[self._last_mask_w > 0] = (220, 220, 220)   # white → light grey
+        if self._last_mask_y is not None:
+            right[self._last_mask_y > 0] = (0, 215, 255)     # yellow → yellow (BGR)
+        cv2.putText(right, "HSV MASK", (2, h - 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
+
+        return np.hstack([left, right])   # 640 × roi_h
 
     def _show_debug(self, roi, cx: Optional[float]):
         dbg = roi.copy()

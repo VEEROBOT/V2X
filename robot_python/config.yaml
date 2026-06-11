@@ -69,9 +69,17 @@ position:
   n_outer_tags: 8                # IDs 10-17 on the outer track — drift/recovery reference
   tag_spacing_m: 0.70            # 3D slant: sqrt(0.35m_height^2 + 0.61m_ground^2)
   tag_size_m: 0.10               # 10 cm printed tag (outer border included)
-  focal_px: 264.0                # Pi Cam v2 at 320px: 3.04mm*320/3.68mm — recalibrate if different camera
+  focal_px: 264.0                # ArduCam 8MP IMX219 at 320px: 3.04mm*320/3.68mm — verify with calibration
   detect_every_n: 3              # run detector on every Nth frame (~10 Hz at 30 fps)
   debug_image: false
+
+# ── Vision stream (desktop browser) ─────────────────────────────────────────
+# Open http://<robot-ip>:5005/ in any browser on the same network.
+# Shows: full camera frame / lane detection overlay / HSV colour mask / status bar.
+# Set enabled: false to disable (saves ~5% CPU when not needed).
+stream:
+  enabled: true
+  port: 5005
 
 # ── Position broadcaster (peer-to-peer UDP) ──────────────────────────────────
 position_broadcaster:
