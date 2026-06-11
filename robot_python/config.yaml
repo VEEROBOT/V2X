@@ -1,11 +1,12 @@
 ###############################################################################
 # V2X Robot — Pure Python Stack Configuration
 #
-# Road: 4×4 foam mats (60 cm each) = 2.4 m × 2.4 m rounded-square loop
-#   Black boundary / Black road / White broken centre line / Yellow yield zone
-#   AprilTag 36h11 in centre-line gaps, one every 0.5 m (~22 tags total)
+# Arena: 10 ft × 12 ft (arena.svg) — 5×6 grid of 2 ft cells
+#   Outer yellow boundary  / Inner white oval / Inner yellow island
+#   10 AprilTag 36h11 on the inner white oval (IDs 0-9, ~0.61 m spacing)
+#    8 AprilTag 36h11 on the outer track      (IDs 10-17, recovery reference)
 #
-# Both robots follow the WHITE CENTRE LINE (lane_offset_px = 0).
+# Both robots follow the WHITE OVAL LINE (lane_offset_px = 0).
 # The car moves left onto the yellow yield zone during evasion.
 # The ambulance runs faster (0.28 m/s) and passes on the centre.
 #
@@ -36,7 +37,7 @@ camera:
 lane_follower:
   linear_speed: 0.20             # m/s — car default (ambulance overrides to 0.28)
   max_angular_speed: 1.2         # rad/s
-  crop_top_ratio: 0.55           # ignore top 55% of frame
+  crop_top_ratio: 0.40           # 30deg tilt / 350mm height → sees road 0.25–0.75m ahead
   min_contour_area: 150          # px² — filters noise; handles thin yellow bars
 
   kp: 0.005
@@ -64,10 +65,11 @@ lane_follower:
 
 # ── AprilTag position estimator ──────────────────────────────────────────────
 position:
-  n_tags: 18                     # 16×16 ft rounded loop ≈ 18m perimeter, 1 tag/m
-  tag_spacing_m: 1.0             # 1 tag per metre
+  n_inner_tags: 10               # IDs 0-9 on the inner white oval — primary zone tracking
+  n_outer_tags: 8                # IDs 10-17 on the outer track — drift/recovery reference
+  tag_spacing_m: 0.70            # 3D slant: sqrt(0.35m_height^2 + 0.61m_ground^2)
   tag_size_m: 0.10               # 10 cm printed tag (outer border included)
-  focal_px: 250.0                # calibrate: pixel_width × known_dist / tag_size
+  focal_px: 264.0                # Pi Cam v2 at 320px: 3.04mm*320/3.68mm — recalibrate if different camera
   detect_every_n: 3              # run detector on every Nth frame (~10 Hz at 30 fps)
   debug_image: false
 
@@ -96,8 +98,8 @@ emergency_handler:
   hold_timeout_s: 30.0          # safety: max hold before forced resume
   clear_delay_s: 1.0            # grace period after ambulance passes
   resume_ramp_duration_s: 2.0   # speed ramp back to normal
-  n_tags: 18
-  yield_zone_gap: 3             # yield only if ambulance ≤ 3 zones (3m) behind
+  n_tags: 10                     # matches n_inner_tags — zones are 0-9
+  yield_zone_gap: 3             # yield only if ambulance ≤ 3 zones (~1.8 m) behind
   position_timeout_s: 3.0       # stale peer position threshold
 
 # ── Joystick ──────────────────────────────────────────────────────────────────

@@ -132,7 +132,8 @@ def main():
     # ── Position estimator + broadcaster ─────────────────────────────────
     pc = cfg['position']
     estimator = PositionEstimator(
-        n_tags=pc['n_tags'],
+        n_inner_tags=pc['n_inner_tags'],
+        n_outer_tags=pc['n_outer_tags'],
         tag_spacing_m=pc['tag_spacing_m'],
         tag_size_m=pc['tag_size_m'],
         focal_px=pc['focal_px'],

@@ -42,7 +42,7 @@ class EmergencyHandler:
                  hold_timeout_s:         float = 30.0,
                  clear_delay_s:          float = 1.0,
                  resume_ramp_duration_s: float = 2.0,
-                 n_tags:                 int   = 22,
+                 n_tags:                 int   = 10,
                  yield_zone_gap:         int   = 4,
                  position_timeout_s:     float = 3.0):
 
