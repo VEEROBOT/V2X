@@ -1,31 +1,32 @@
 # V2X Demo Track Design
 
-> **Space:** 16 × 16 ft (4.88 × 4.88 m) rounded-square loop  
-> **AprilTag family:** `DICT_APRILTAG_36H11` (IDs 0 – 17)  
-> **Last updated:** 2026-06-08
+> **Space:** 10 × 12 ft (3048 × 3657 mm) oval loop  
+> **AprilTag family:** `DICT_APRILTAG_36H11`  
+> **Tags:** 10 inner (primary) + 8 outer (recovery) = 18 total  
+> **Last updated:** 2026-06-11
 
 ---
 
 ## Overview
 
-A single-lane loop track that both robots follow.  
-The car drives on the white centre-line; when an emergency alert arrives it steers left onto the yellow yield zone and holds until the ambulance passes.
+An oval loop track. Both robots follow the **white oval boundary line**.  
+When an emergency alert arrives the car steers left onto the **yellow yield zone** (inner island) and holds until the ambulance passes.
 
 ```
-┌──────────────────────────────────┐
-│  ╔════════════════════════════╗  │  Black boundary (foam tile edges)
-│  ║  ·  ·  ·  ·  ·  ·  ·  · ·  ║  │  ·  = AprilTag (ID in table below)
-│  ║                            ║  │
-│  ║  ·                      ·  ║  │  Road surface: BLACK foam tiles
-│  ║                            ║  │  Centre line:  WHITE tape (broken)
-│  ║  ·                      ·  ║  │  Left shoulder: YELLOW tape (yield)
-│  ║                            ║  │
-│  ║  ·  ·  ·  ·  ·  ·  ·  · ·  ║  │
-│  ╚════════════════════════════╝  │
-└──────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│  outer yellow boundary                   │
+│  ┌──────────────────────────────────┐    │
+│  │  white oval (robots follow this) │    │
+│  │  ┌────────────────────────┐      │    │
+│  │  │  yellow inner island   │      │    │
+│  │  │  (yield zone / inner   │      │    │
+│  │  │   AprilTag wall)       │      │    │
+│  │  └────────────────────────┘      │    │
+│  └──────────────────────────────────┘    │
+└──────────────────────────────────────────┘
 ```
 
-Direction of travel: **clockwise** (looking from above).
+Direction of travel: **clockwise** (viewed from above).
 
 ---
 
@@ -33,58 +34,74 @@ Direction of travel: **clockwise** (looking from above).
 
 | Item | Spec | Qty |
 |------|------|-----|
-| Foam puzzle tiles | 60 cm × 60 cm, black | ~24 tiles (fill 16 × 16 ft) |
-| White gaffer / vinyl tape | 25 mm wide | ~20 m |
-| Yellow gaffer / vinyl tape | 25 mm wide | ~10 m |
-| AprilTag prints | 10 cm × 10 cm on white card | 18 |
+| White tape (oval boundary) | 25 mm wide | ~8 m |
+| Yellow tape (inner island) | 25 mm wide | ~6 m |
+| Yellow tape (outer boundary) | 25 mm wide | ~10 m |
+| AprilTag prints (inner) | 10 cm × 10 cm on white card | 10 |
+| AprilTag prints (outer) | 10 cm × 10 cm on white card | 8 |
 
 ---
 
 ## Lane Markings
 
 ```
-← road direction →
-┌──────────────────────────────────────┐
-│  YELLOW YIELD ZONE  │  ROAD  │ EDGE  │
-│  (25 mm tape)       │        │       │
-│─────────────────────│        │       │
-│                     │ ─ ─ ─  │       │  ← WHITE broken centre line
-│─────────────────────│  GAP   │       │     gap = 15 cm for AprilTag
-│  YELLOW             │        │       │
-└──────────────────────────────────────┘
- ←10cm→ ←5cm gap→ ←tag→ ←5cm gap→
+← road direction (clockwise) →
+
+  [outer yellow boundary]
+        |
+  ~510 mm road width
+        |
+  [white oval line]  ← robots follow this
+        |
+  ~510 mm inner track width  ← yield / evasion zone
+        |
+  [yellow inner island]  ← car moves left onto this during emergency
 ```
 
-- **Centre line**: white tape, broken every ~30 cm with a 15 cm gap
-- **AprilTag placement**: centred in a 15 cm gap, flush with the road surface
-- **Yellow yield zone**: single strip of yellow tape, 8–10 cm to the left of the centre line; car steers left onto it during evasion
+- **White oval**: main lane boundary — broken dashes, 25 mm wide
+- **Yellow inner island**: left side boundary — continuous strip; car steers onto it during evasion
+- **Yellow outer boundary**: right/outer edge — continuous strip; marks arena limit
+- **Track width**: ~510 mm (white oval to yellow inner island, each side)
 
 ---
 
 ## AprilTag Layout
 
-| ID | Position on loop (clockwise from start) |
-|----|-----------------------------------------|
-| 0  | 0.0 m  — start / finish line           |
-| 1  | 1.0 m                                   |
-| 2  | 2.0 m                                   |
-| 3  | 3.0 m                                   |
-| 4  | 4.0 m                                   |
-| 5  | 5.0 m                                   |
-| 6  | 6.0 m                                   |
-| 7  | 7.0 m                                   |
-| 8  | 8.0 m                                   |
-| 9  | 9.0 m                                   |
-| 10 | 10.0 m                                  |
-| 11 | 11.0 m                                  |
-| 12 | 12.0 m                                  |
-| 13 | 13.0 m                                  |
-| 14 | 14.0 m                                  |
-| 15 | 15.0 m                                  |
-| 16 | 16.0 m                                  |
-| 17 | 17.0 m                                  |
+### Inner Tags — primary zone tracking (IDs 0–9)
 
-Total perimeter: **≈ 18 m** (4 straight sides × ~4 m + 4 rounded corners × ~0.5 m each)
+Mounted on the wall/edge of the **inner yellow island**, facing outward so the robot sees them while driving the oval.
+
+| ID | Position (clockwise from start) | Notes |
+|----|----------------------------------|-------|
+| 0  | 0.00 m — start / finish         | |
+| 1  | 0.67 m                           | |
+| 2  | 1.34 m                           | |
+| 3  | 2.01 m                           | |
+| 4  | 2.68 m                           | |
+| 5  | 3.35 m                           | |
+| 6  | 4.02 m                           | |
+| 7  | 4.69 m                           | |
+| 8  | 5.36 m                           | |
+| 9  | 6.03 m                           | |
+
+Inner oval perimeter: **≈ 6.7 m** — 10 tags at ~0.67 m spacing.
+
+### Outer Tags — recovery reference only (IDs 10–17)
+
+Mounted on the **outer yellow boundary wall**, facing inward. Detected only when the robot drifts outside the inner oval. Triggers `off_track` warning; does not update zone.
+
+| ID | Position (clockwise from start) | Notes |
+|----|----------------------------------|-------|
+| 10 | 0.0 m   | |
+| 11 | 1.24 m  | |
+| 12 | 2.49 m  | |
+| 13 | 3.73 m  | |
+| 14 | 4.97 m  | |
+| 15 | 6.22 m  | |
+| 16 | 7.46 m  | |
+| 17 | 8.71 m  | |
+
+Outer boundary perimeter: **≈ 9.9 m** — 8 tags at ~1.24 m spacing.
 
 ---
 
@@ -95,47 +112,47 @@ Total perimeter: **≈ 18 m** (4 straight sides × ~4 m + 4 rounded corners × ~
 | Family | `36h11` |
 | Outer tag size | **10 cm × 10 cm** (including black border) |
 | Printed on | White card / heavy paper |
-| Laminate | Optional — protects from wheel scuffs |
-| Orientation | Flat on floor, centred in tape gap |
+| Laminate | Optional — protects from scuffs |
+| Orientation | Vertical on wall, facing track centre |
+| Height from ground | Match camera height (~350 mm) |
 | ID label | Write tag ID on back for reinstallation |
 
-Generate tags with:
+Generate tags:
 ```python
-import cv2, numpy as np
-aruco = cv2.aruco
-params = aruco.DetectorParameters()
-dictionary = aruco.getPredefinedDictionary(aruco.DICT_APRILTAG_36H11)
+import cv2
+dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36H11)
 for tag_id in range(18):
-    img = aruco.generateImageMarker(dictionary, tag_id, 300)
+    img = cv2.aruco.generateImageMarker(dictionary, tag_id, 300)
     cv2.imwrite(f"tag_{tag_id:02d}.png", img)
 ```
-Then print each PNG at 10 cm × 10 cm (verify with a ruler before placing).
+Print each PNG at exactly **10 cm × 10 cm** (verify with a ruler).
 
 ---
 
 ## Robot Configuration
 
-These values in `config.yaml` must match the physical track:
+These values in `config.yaml` match the physical track:
 
 ```yaml
 position:
-  n_tags: 18          # total tags on track
-  tag_spacing_m: 1.0  # distance between consecutive tags (metres)
-  tag_size_m: 0.10    # printed tag outer size (metres)
-  focal_px: 250.0     # calibrate after setup — see below
+  n_inner_tags: 10        # IDs 0-9 on inner oval wall — primary zone tracking
+  n_outer_tags: 8         # IDs 10-17 on outer boundary — drift/recovery reference
+  tag_spacing_m: 0.70     # 3D slant distance: sqrt(0.35m_height² + 0.61m_ground²)
+  tag_size_m: 0.10        # 10 cm printed tag (outer border included)
+  focal_px: 264.0         # ArduCam 8MP IMX219 at 320px — verify with calibration
 
 emergency_handler:
-  n_tags: 18
-  yield_zone_gap: 3   # yield only if ambulance is within 3 m behind
+  n_tags: 10
+  yield_zone_gap: 3       # yield only if ambulance ≤ 3 zones (~2 m) behind
 ```
 
 ---
 
 ## focal_px Calibration
 
-After the track is built and camera is mounted:
+After mounting the camera at the correct height and angle:
 
-1. Place the robot so a tag is exactly **30 cm** in front of the camera lens.
+1. Place the robot so an inner tag is exactly **30 cm** in front of the camera lens.
 2. Run:
    ```bash
    cd ~/projects/V2X/robot_python && source .venv/bin/activate
@@ -146,9 +163,8 @@ After the track is built and camera is mounted:
    cam.start()
    import time; time.sleep(2)
    frame = cam.get_frame()
-   aruco = cv2.aruco
-   d = aruco.getPredefinedDictionary(aruco.DICT_APRILTAG_36H11)
-   corners, ids, _ = aruco.detectMarkers(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), d)
+   d = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36H11)
+   corners, ids, _ = cv2.aruco.detectMarkers(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), d)
    if ids is not None:
        w = np.linalg.norm(corners[0][0][1] - corners[0][0][0])
        focal = w * 0.30 / 0.10
@@ -160,17 +176,33 @@ After the track is built and camera is mounted:
 
 ---
 
+## Camera Setup
+
+| Parameter | Value |
+|-----------|-------|
+| Camera | ArduCam 8MP IMX219 (same optics as Pi Camera v2) |
+| Height from ground | ~350 mm |
+| Tilt | ~30° downward |
+| Resolution | 320 × 240 px (processing) |
+| Horizontal FOV | ~62° |
+| Visible ahead (crop 0.30) | 250 mm – 950 mm |
+| Track width in FOV at 850 mm | ~1020 mm — covers full 1019 mm track |
+
+---
+
 ## Assembly Checklist
 
-- [ ] Lay foam tiles in 4×4 grid (≈ 16 × 16 ft)
-- [ ] Mark the loop boundary with chalk or temp tape first
-- [ ] Cut/shape corner tiles for rounded corners
-- [ ] Lay white centre-line tape (broken every ~45 cm, 15 cm gap)
-- [ ] Lay yellow yield-zone tape parallel to centre line, 10 cm to its left
-- [ ] Print 18 AprilTags at 10 cm × 10 cm (use tag generation script above)
-- [ ] Place tags flat in the 15 cm tape gaps, IDs 0 → 17 clockwise
-- [ ] Place robots at tag 0 (start line), both facing clockwise
-- [ ] Run `python3 diag_drive.py` to verify UART, then test camera
+- [ ] Lay out oval track boundary (white tape, ~6.7 m inner oval perimeter)
+- [ ] Lay yellow inner island tape (inner boundary of driving lane)
+- [ ] Lay yellow outer boundary tape (outer limit of arena)
+- [ ] Print 18 AprilTags at 10 cm × 10 cm
+- [ ] Mount inner tags 0–9 on inner island wall, evenly spaced, ~350 mm height
+- [ ] Mount outer tags 10–17 on outer boundary wall, evenly spaced, ~350 mm height
+- [ ] Mount camera on robot at ~350 mm height, ~30° downward tilt
+- [ ] Stop v2x_car service: `sudo systemctl stop v2x_car`
+- [ ] Run `python3 main_car.py` and open http://robot-ip:5005/
+- [ ] Verify tags detected: hold each tag in front of camera, confirm green box + ID in stream
 - [ ] Calibrate `focal_px` (see above)
-- [ ] Tune HSV values for white/yellow under actual room lighting  
-  (`config.yaml` → `lane_follower: white_v_low`, `yellow_h_low / yellow_h_high`)
+- [ ] Tune HSV values for white/yellow under actual room lighting
+- [ ] Place robots at tag 0 (start line), facing clockwise
+- [ ] Press Start (btn7) to arm car; ambulance arms automatically
