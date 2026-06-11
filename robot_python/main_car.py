@@ -68,7 +68,8 @@ def load_config(path: str, role: str = '') -> dict:
 
 
 def _push_stream(streamer, full_frame, roi_panels, crop_y,
-                 estimator, handler, vx, wz):
+                 estimator, handler, bridge, broadcaster,
+                 joystick, armed, vx, wz):
     import cv2, numpy as np
     # Top row: full camera frame (scaled 2× wider) with crop boundary
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
@@ -92,20 +93,38 @@ def _push_stream(streamer, full_frame, roi_panels, crop_y,
     else:
         mid = np.zeros((full_frame.shape[0] - crop_y, 640, 3), np.uint8)
 
-    # Status bar
-    pos   = estimator.get_position()
-    zone  = pos['zone'] if pos else -1
-    off   = pos.get('off_track', False) if pos else False
-    state = handler.get_state()
-    emg   = state != 'NORMAL'
-    bar   = np.zeros((22, 640, 3), np.uint8)
-    col   = (0, 50, 200) if emg else (0, 200, 50)
-    parts = [f"zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", state]
-    if off:  parts.append("OFF-TRACK")
-    cv2.putText(bar, "  ".join(parts), (4, 15),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1)
+    # ── Status bar — row 1: position + speed + state ──────────────────────
+    pos       = estimator.get_position()
+    zone      = pos['zone'] if pos else -1
+    off       = pos.get('off_track', False) if pos else False
+    peer_pos  = broadcaster.get_peer_position()
+    peer_zone = peer_pos['zone'] if peer_pos else -1
+    state     = handler.get_state()
+    emg       = state != 'NORMAL'
+    mode      = 'MANUAL' if joystick.is_manual() else 'AUTO'
+    arm_lbl   = 'ARMED' if armed else 'DISARMED'
 
-    streamer.push_frame(np.vstack([top, mid, bar]))
+    bar1 = np.zeros((22, 640, 3), np.uint8)
+    col1 = (0, 50, 220) if emg else (0, 200, 50)
+    row1 = [f"CAR zone={zone}", f"AMB zone={peer_zone}",
+            f"vx={vx:.2f}", f"wz={wz:+.2f}", state]
+    if off: row1.append("OFF-TRACK")
+    cv2.putText(bar1, "  ".join(row1), (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, col1, 1)
+
+    # ── Status bar — row 2: arm + mode + V2X ─────────────────────────────
+    bar2 = np.zeros((22, 640, 3), np.uint8)
+    arm_col = (0, 220, 50) if armed else (0, 80, 220)
+    v2x_col = (0, 50, 220) if emg else (120, 120, 120)
+    cv2.putText(bar2, arm_lbl, (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, arm_col, 1)
+    cv2.putText(bar2, mode, (110, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 215, 255), 1)
+    v2x_txt = "V2X:EMERGENCY" if emg else ("V2X:ACTIVE" if bridge.is_emergency() else "V2X:STANDBY")
+    cv2.putText(bar2, v2x_txt, (200, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, v2x_col, 1)
+
+    streamer.push_frame(np.vstack([top, mid, bar1, bar2]))
 
 
 def main():
@@ -296,7 +315,8 @@ def main():
                     _last_stream_t = now
                     panels = follower.get_roi_panels()
                     _push_stream(streamer, frame, panels, _crop_y,
-                                 estimator, handler, _stream_vx, _stream_wz)
+                                 estimator, handler, bridge, broadcaster,
+                                 joystick, _robot_armed, _stream_vx, _stream_wz)
 
             if not _robot_armed:
                 if frame is None:
