@@ -64,13 +64,33 @@ lane_follower:
   lookahead_frac: 0.35           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
   ly_min_px: 30                  # minimum Ly in formula — prevents blow-up when only near strips detected
 
-  # --- Recorded Path (algorithm: recorded_path) ---
-  # How to record: arm with Start, hold deadman (LB), press X → "Training STARTED".
-  # Drive one full clockwise loop (tag 0 back to tag 0). Press X again → saved.
-  # Release deadman — robot blends 70% learned curvature + 30% live camera.
+  # --- Recorded Path — Learning from Demonstration ---
+  #
+  # HOW TO RECORD A TRAINING LAP:
+  #   1. Set  algorithm: recorded_path  below (this section)
+  #   2. Press Start (joystick) to arm the robot
+  #   3. Hold LB (deadman) — take manual control
+  #   4. Press X → logs "Training STARTED" — recording begins
+  #   5. Drive one complete clockwise loop (tag 0 → tag 0)
+  #   6. Press X again → logs "Training SAVED" → file written to ~/v2x_training.json
+  #   7. Release LB — robot switches to autonomous mode immediately,
+  #      blending the learned curvature with live camera feedback
+  #
+  # HOW TO USE EXISTING TRAINING DATA (no new recording needed):
+  #   1. Set  algorithm: recorded_path
+  #   2. Arm and release LB — robot blends ff_blend fraction from file automatically
+  #
+  # HOW TO DEACTIVATE / SWITCH BACK:
+  #   • To ignore training and use camera only:  set  use_training_data: false
+  #   • To go back to pure camera steering:      set  algorithm: pure_pursuit
+  #   • To go back to original centroid:         set  algorithm: centroid
+  #
+  # FILE: ~/v2x_training.json  (persists across reboots; delete to reset)
+  # FORMAT: per-zone mean curvature and speed recorded during the training lap
+  #
   use_training_data: true        # false = ignore training file, behave like pure_pursuit
   training_data_file: ~/v2x_training.json
-  ff_blend: 0.70                 # 0=pure camera  1=pure training  0.7=recommended
+  ff_blend: 0.70                 # 0.0=pure camera  1.0=pure training  0.7=recommended start
 
   # --- Centroid PID gains (algorithm: centroid) ---
   kp: 0.007                      # proportional: higher = sharper correction
