@@ -1,58 +1,81 @@
 ###############################################################################
-# V2X Robot — Pure Python Stack Configuration
+# V2X Robot — Configuration
 #
-# Arena: 10 ft × 12 ft (arena.svg) — 5×6 grid of 2 ft cells
-#   Outer yellow boundary  / Inner white oval / Inner yellow island
-#   10 AprilTag 36h11 on the inner white oval (IDs 0-9, ~0.61 m spacing)
-#    8 AprilTag 36h11 on the outer track      (IDs 10-17, recovery reference)
-#
-# Both robots follow the WHITE OVAL LINE (lane_offset_px = 0).
-# The car moves left onto the yellow yield zone during evasion.
-# The ambulance runs faster (0.28 m/s) and passes on the centre.
-#
-# Override per-robot values in main_car.py / main_ambulance.py or via CLI args.
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  QUICK TUNING REFERENCE                                                 ║
+# ║                                                                         ║
+# ║  Robot too fast / slow on line   → lane_follower.linear_speed           ║
+# ║  Robot turns too sharp / gentle  → lane_follower.max_angular_speed      ║
+# ║  Speed when line lost / in gap   → lane_follower.lost_linear_frac       ║
+# ║  How long before stopping blind  → lane_follower.lost_stop_s            ║
+# ║  Yellow repel strength           → lane_follower.yellow_repel_frac      ║
+# ║                                                                         ║
+# ║  Joystick normal drive speed     → joystick.max_speed                   ║
+# ║  Joystick turbo speed            → joystick.turbo_speed                 ║
+# ║  Joystick turn rate              → joystick.max_steering                ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
 ###############################################################################
 
-# ── STM32 serial link ────────────────────────────────────────────────────────
+
+# ── Serial link to STM32 ─────────────────────────────────────────────────────
 serial:
   port: /dev/ttyAMA0
   baudrate: 115200
 
-# ── Robot physical parameters ────────────────────────────────────────────────
+
+# ── Robot physical parameters (don't change unless hardware changes) ──────────
 robot:
   wheel_radius_m: 0.065
   track_width_m: 0.377
   max_wheel_speed_rad_s: 15.7
-  cmd_vel_timeout_s: 0.5         # Stop motors if no command for this long
+  cmd_vel_timeout_s: 0.5
+
 
 # ── Camera ────────────────────────────────────────────────────────────────────
 camera:
-  use_picamera2: true            # true = picamera2 (Pi Camera on Ubuntu, recommended)
-                                 # false = cv2.VideoCapture (webcam / desktop testing)
+  use_picamera2: true
   device: 0                      # used only when use_picamera2: false
   width: 320
   height: 240
 
-# ── Lane follower ────────────────────────────────────────────────────────────
+
+# ── Lane Follower ─────────────────────────────────────────────────────────────
 lane_follower:
-  linear_speed: 0.20             # m/s — car default (ambulance overrides to 0.28)
-  max_angular_speed: 1.2         # rad/s
-  crop_top_ratio: 0.30           # 30deg tilt / 350mm height → sees road 0.25–0.95m ahead (covers full 1019mm track width)
-  min_contour_area: 150          # px² — filters noise; handles thin yellow bars
 
-  kp: 0.005
-  ki: 0.0001
-  kd: 0.002
+  # --- Speed ---
+  linear_speed: 0.10             # m/s — how fast the robot drives on the line
+  max_angular_speed: 0.9         # rad/s — max turn rate (keep below 1.06 to avoid wheel reversal)
+  lost_linear_frac: 0.50         # 50% speed while lost — slow enough to limit drift, fast enough to cross dash gaps
+  lost_stop_s: 4.0               # seconds of pure LOST (no yellow either) before full stop
+  no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
 
-  # White centre-line (HSV)
+  # --- PID steering gains ---
+  kp: 0.007                      # proportional: higher = sharper correction
+  ki: 0.0                        # integral: leave at 0 (causes wind-up on this track)
+  kd: 0.0                        # derivative: disabled — amplified centroid jumps into wz spikes
+
+  # --- Geometry ---
+  crop_top_ratio: 0.30           # discard top 30% of frame (sky/walls) — increase if line appears near top
+  min_contour_area: 150          # px² — minimum blob size (filters floor noise)
+  lane_offset_px: 0              # shift target left(−) or right(+) of frame centre
+
+  # --- Yellow boundary avoidance ---
+  yellow_repel_frac: 0.65        # how hard to steer away from yellow — increased from 0.40 (was too gentle)
+
+  # --- HSV colour thresholds ---
+  # Tip: watch the HSV MASK panel in the browser stream.
+  #      White tape should show as light-grey, yellow/cyan tape as yellow.
+  #      Adjust V_low if the line disappears in your lighting.
+
+  # White centre-line
   white_h_low:   0
   white_h_high: 180
   white_s_low:   0
-  white_s_high:  55
-  white_v_low:  190
+  white_s_high:  70
+  white_v_low:  150              # lower this (e.g. 120) if white line isn't detected
   white_v_high: 255
 
-  # Yellow yield zone (HSV)
+  # Yellow boundary tape
   yellow_h_low:   20
   yellow_h_high:  35
   yellow_s_low:   80
@@ -60,100 +83,102 @@ lane_follower:
   yellow_v_low:   80
   yellow_v_high: 255
 
-  lane_offset_px: 0              # 0 = track white centre line directly
-  debug_image: false             # show OpenCV debug window when true
+  # Cyan — catches yellow tape when camera AWB shifts yellow → teal/cyan
+  cyan_h_low:   80
+  cyan_h_high: 100
+  cyan_s_low:   80
+  cyan_s_high: 255
+  cyan_v_low:   80
+  cyan_v_high: 255
 
-# ── AprilTag position estimator ──────────────────────────────────────────────
+  debug_image: false             # show OpenCV debug window (only when running with a display)
+
+
+# ── AprilTag Position Estimator ───────────────────────────────────────────────
 position:
-  n_inner_tags: 10               # IDs 0-9 on the inner white oval — primary zone tracking
-  n_outer_tags: 8                # IDs 10-17 on the outer track — drift/recovery reference
-  tag_spacing_m: 0.70            # 3D slant: sqrt(0.35m_height^2 + 0.61m_ground^2)
-  tag_size_m: 0.10               # 10 cm printed tag (outer border included)
-  focal_px: 264.0                # ArduCam 8MP IMX219 at 320px: 3.04mm*320/3.68mm — verify with calibration
-  detect_every_n: 3              # run detector on every Nth frame (~10 Hz at 30 fps)
+  n_inner_tags: 10               # IDs 0-9 on the inner white oval
+  n_outer_tags: 8                # IDs 10-17 on the outer boundary
+  tag_spacing_m: 0.70            # distance between adjacent tags (m)
+  tag_size_m: 0.10               # printed tag outer size (m)
+  focal_px: 264.0                # camera focal length in pixels (320px wide IMX219)
+  detect_every_n: 3              # run detector every Nth frame (~10 Hz at 30 fps)
   debug_image: false
 
-# ── Vision stream (desktop browser) ─────────────────────────────────────────
+
+# ── Vision Stream (browser) ───────────────────────────────────────────────────
 # Open http://<robot-ip>:5005/ in any browser on the same network.
-# Shows: full camera frame / lane detection overlay / HSV colour mask / status bar.
-# Set enabled: false to disable (saves ~5% CPU when not needed).
 stream:
   enabled: true
   port: 5005
 
-# ── Position broadcaster (peer-to-peer UDP) ──────────────────────────────────
+
+# ── Position Broadcaster (peer UDP) ──────────────────────────────────────────
 position_broadcaster:
-  peer_ip: '192.168.0.255'       # subnet broadcast — all robots receive all positions
+  peer_ip: '192.168.0.255'
   peer_port: 5002
   broadcast_hz: 10.0
-  role: car                      # override to 'ambulance' in main_ambulance.py
+  role: car
 
-# ── V2X bridge ───────────────────────────────────────────────────────────────
+
+# ── V2X Bridge ────────────────────────────────────────────────────────────────
 v2x_bridge:
-  role: car                      # override to 'ambulance' in main_ambulance.py
+  role: car
   obu_binary: '../v2x_testbed/obu/build/obu_client'
   obu_config: '../v2x_testbed/obu/config/obu_local.json'
-  manual_mode: false             # false = start RSU alert listener on car_alert_port
-  car_alert_port: 5001           # UDP port for RSU → car alerts
+  manual_mode: false
+  car_alert_port: 5001
   exit_clear_delay_s: 5.0
-  obu_loop_count: 1              # 1 = authenticate once then stop (session lasts 300s); 0 = loop forever
+  obu_loop_count: 1
 
-# ── Emergency handler (car only) ─────────────────────────────────────────────
+
+# ── Emergency Handler (car only) ─────────────────────────────────────────────
 emergency_handler:
-  evasion_linear_speed: 0.20    # m/s while steering left (must be > wz * track_width/2 = 0.17 to avoid left-wheel reversal)
-  evasion_angular_speed: 0.9    # rad/s left-turn rate
-  evasion_duration_s: 2.0       # time to steer left before holding
-  hold_timeout_s: 30.0          # safety: max hold before forced resume
-  clear_delay_s: 1.0            # grace period after ambulance passes
-  resume_ramp_duration_s: 2.0   # speed ramp back to normal
-  n_tags: 10                     # matches n_inner_tags — zones are 0-9
-  yield_zone_gap: 3             # yield only if ambulance ≤ 3 zones (~1.8 m) behind
-  position_timeout_s: 3.0       # stale peer position threshold
+  evasion_linear_speed: 0.20
+  evasion_angular_speed: 0.9
+  evasion_duration_s: 2.0
+  hold_timeout_s: 30.0
+  clear_delay_s: 1.0
+  resume_ramp_duration_s: 2.0
+  n_tags: 10
+  yield_zone_gap: 3
+  position_timeout_s: 3.0
+
 
 # ── Joystick ──────────────────────────────────────────────────────────────────
-# RF joystick via USB dongle: appears as /dev/input/js0 (standard HID gamepad).
-# Hold deadman_button to enable joystick; release → robot returns to autonomous.
-# Tune axis numbers if your stick mapping differs (check with jstest /dev/input/js0).
 joystick:
-  device_index:   0             # pygame joystick index (0 = first connected)
-  deadman_button: 4             # hold LB (button 4) to enable joystick control
-  turbo_button:   5             # hold RB (button 5) simultaneously for turbo speed
-  arm_button:     7             # press Start (button 7) to arm/disarm toggle
-  axis_throttle:  1             # left stick Y  (push forward = negative raw)
-  axis_steering:  3             # right stick X (push right = positive raw → turn right)
-  max_speed:      0.40          # m/s — full stick forward (normal)
-  turbo_speed:    0.80          # m/s — full stick forward in turbo mode
-  max_steering:   1.50          # rad/s — full stick sideways
-  deadzone:       0.10          # ignore stick noise below this fraction
-  accel_rate:     2.0           # m/s² — how fast speed ramps up
-  decel_rate:     4.0           # m/s² — how fast speed ramps down (braking)
+  device_index:   0
+  deadman_button: 4              # hold LB to enable joystick
+  turbo_button:   5              # hold RB simultaneously for turbo
+  arm_button:     7              # press Start to arm / disarm
 
-# ── Control socket (manual trigger without OBU) ──────────────────────────────
-# Send UDP JSON to 127.0.0.1:control_port to control the robot:
-#   {"cmd": "emergency_on"}   — activate emergency (ambulance)
-#   {"cmd": "emergency_off"}  — clear emergency
-#   {"cmd": "arm"}            — arm motors
-#   {"cmd": "disarm"}         — disarm motors
-#   {"cmd": "estop"}          — emergency stop
-#   {"cmd": "status"}         — print status to stdout
+  # --- Speed limits ---
+  max_speed:    0.30             # m/s — full stick forward (normal)
+  turbo_speed:  0.60             # m/s — full stick forward in turbo mode
+  max_steering: 1.20             # rad/s — full stick sideways
+
+  deadzone:     0.10
+  accel_rate:   2.0              # m/s² ramp up
+  decel_rate:   4.0              # m/s² ramp down
+
+
+# ── Control Socket ────────────────────────────────────────────────────────────
 control:
-  port: 5010                    # overridden per role below
+  port: 5010
 
-# ── Per-role overrides ────────────────────────────────────────────────────────
-# main_car.py and main_ambulance.py deep-merge their section over the base above.
-# Add any per-robot tuning here — no manual edits needed on individual Pis.
+
+# ── Per-robot overrides ───────────────────────────────────────────────────────
 car:
   lane_follower:
-    linear_speed: 0.20          # m/s
+    linear_speed: 0.10
   v2x_bridge:
-    obu_loop_count: 1           # authenticate once, OBU exits (session lasts 300s)
+    obu_loop_count: 1
   control:
     port: 5010
 
 ambulance:
   lane_follower:
-    linear_speed: 0.28          # m/s — faster so ambulance catches up from behind
+    linear_speed: 0.18
   v2x_bridge:
-    obu_loop_count: 0           # loop forever — keeps emergency active while service runs
+    obu_loop_count: 0
   control:
     port: 5011

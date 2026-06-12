@@ -209,7 +209,9 @@ class Joystick:
                 vx = self._vx_slewed
 
             except Exception as e:
-                logger.error("Joystick read error: %s", e)
+                logger.warning("Joystick read error — will reconnect: %s", e)
+                with self._lock:
+                    self._js = None   # trigger reconnect on next 5 s retry
                 deadman, arm_now, vx, wz = False, False, 0.0, 0.0
                 self._vx_slewed = 0.0
 

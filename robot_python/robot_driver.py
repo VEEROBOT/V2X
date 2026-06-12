@@ -226,6 +226,14 @@ class RobotDriver:
         half = self._track_width / 2.0
         v_l  = vx - wz * half
         v_r  = vx + wz * half
+        # When driving forward, don't let either wheel reverse — prevents spin-out on tight turns.
+        # The inner wheel is clamped to zero; the robot arcs as tight as geometry allows.
+        if vx > 0:
+            v_l = max(v_l, 0.0)
+            v_r = max(v_r, 0.0)
+        elif vx < 0:
+            v_l = min(v_l, 0.0)
+            v_r = min(v_r, 0.0)
         w_l  = max(min(v_l / self._wheel_radius, self._max_wheel_speed), -self._max_wheel_speed)
         w_r  = max(min(v_r / self._wheel_radius, self._max_wheel_speed), -self._max_wheel_speed)
         return [w_l, w_l, w_r, w_r]  # [FL, BL, BR, FR]

@@ -22,6 +22,7 @@ Manual emergency (from another terminal on same Pi):
 """
 
 import argparse
+import csv
 import logging
 import os
 import signal
@@ -49,6 +50,74 @@ logging.basicConfig(
 )
 logger = logging.getLogger('car')
 
+_LOG_PATH = os.path.expanduser('~/v2x_run.csv')
+_LOG_HZ   = 10          # rows per second written to the log
+_LOG_COLS = ['time_s', 'vx', 'wz', 'zone', 'mode', 'white_err_px', 'tags_seen']
+
+
+class RunLogger:
+    """
+    Writes a CSV run log while the robot is armed.
+
+    File: ~/v2x_run.csv — overwritten at the start of each arm session.
+    Cleared on every arm press so old data never accumulates.
+    Delete manually with:  rm ~/v2x_run.csv
+    """
+
+    def __init__(self):
+        self._file    = None
+        self._writer  = None
+        self._t_start = 0.0
+        self._t_last  = 0.0
+        self._armed   = False
+
+    def arm(self):
+        self._close()
+        self._file   = open(_LOG_PATH, 'w', newline='', buffering=1)
+        self._writer = csv.writer(self._file)
+        self._writer.writerow(_LOG_COLS)
+        self._t_start = time.monotonic()
+        self._t_last  = 0.0
+        self._armed   = True
+        logger.info("Run log started → %s", _LOG_PATH)
+
+    def disarm(self):
+        self._armed = False
+        self._close()
+        logger.info("Run log closed → %s", _LOG_PATH)
+
+    def log(self, vx: float, wz: float, zone: int,
+            follower, estimator):
+        if not self._armed or self._writer is None:
+            return
+        now = time.monotonic()
+        if now - self._t_last < 1.0 / _LOG_HZ:
+            return
+        self._t_last = now
+
+        info = follower.get_debug_info()
+        _, tag_ids = estimator.get_last_detections()
+        tags_str   = ';'.join(str(i) for i in tag_ids) if tag_ids else ''
+
+        self._writer.writerow([
+            round(now - self._t_start, 2),
+            round(vx, 3),
+            round(wz, 3),
+            zone,
+            info['mode'],
+            info['white_err'] if info['white_err'] is not None else '',
+            tags_str,
+        ])
+
+    def _close(self):
+        if self._file:
+            try:
+                self._file.close()
+            except Exception:
+                pass
+            self._file   = None
+            self._writer = None
+
 
 def _deep_merge(base: dict, override: dict):
     for k, v in override.items():
@@ -68,7 +137,7 @@ def load_config(path: str, role: str = '') -> dict:
 
 
 def _push_stream(streamer, full_frame, roi_panels, crop_y,
-                 estimator, handler, vx, wz):
+                 estimator, handler, follower, vx, wz):
     import cv2, numpy as np
     # Top row: full camera frame (scaled 2× wider) with crop boundary
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
@@ -100,7 +169,7 @@ def _push_stream(streamer, full_frame, roi_panels, crop_y,
     emg   = state != 'NORMAL'
     bar   = np.zeros((22, 640, 3), np.uint8)
     col   = (0, 50, 200) if emg else (0, 200, 50)
-    parts = [f"zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", state]
+    parts = [f"zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", state, follower.get_mode()]
     if off:  parts.append("OFF-TRACK")
     cv2.putText(bar, "  ".join(parts), (4, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1)
@@ -182,6 +251,12 @@ def main():
         white_hsv_high=(lc['white_h_high'], lc['white_s_high'], lc['white_v_high']),
         yellow_hsv_low =(lc['yellow_h_low'],  lc['yellow_s_low'],  lc['yellow_v_low']),
         yellow_hsv_high=(lc['yellow_h_high'], lc['yellow_s_high'], lc['yellow_v_high']),
+        cyan_hsv_low =(lc['cyan_h_low'],  lc['cyan_s_low'],  lc['cyan_v_low']),
+        cyan_hsv_high=(lc['cyan_h_high'], lc['cyan_s_high'], lc['cyan_v_high']),
+        yellow_repel_frac=lc.get('yellow_repel_frac', 0.40),
+        lost_linear_frac=lc.get('lost_linear_frac', 1.0),
+        lost_stop_s=lc.get('lost_stop_s', 4.0),
+        no_white_stop_s=lc.get('no_white_stop_s', 8.0),
         debug=args.debug_image or lc.get('debug_image', False),
     )
 
@@ -273,6 +348,7 @@ def main():
     _stream_wz       = 0.0
     _last_stream_t   = 0.0
     _crop_y          = int(lc['crop_top_ratio'] * cc['height'])
+    _run_log         = RunLogger()
 
     try:
         while True:
@@ -281,10 +357,12 @@ def main():
                 _robot_armed = not _robot_armed
                 if _robot_armed:
                     driver.arm()
+                    _run_log.arm()
                     logger.info("*** ARMED (Start button) ***")
                 else:
                     driver.set_velocity(0.0, 0.0)
                     driver.disarm()
+                    _run_log.disarm()
                     logger.info("*** DISARMED (Start button) ***")
 
             # ── Camera grab + stream — always runs regardless of arm state ──
@@ -296,7 +374,7 @@ def main():
                     _last_stream_t = now
                     panels = follower.get_roi_panels()
                     _push_stream(streamer, frame, panels, _crop_y,
-                                 estimator, handler, _stream_vx, _stream_wz)
+                                 estimator, handler, follower, _stream_vx, _stream_wz)
 
             if not _robot_armed:
                 if frame is None:
@@ -331,12 +409,17 @@ def main():
             driver.set_velocity(vx, wz)
             _stream_vx, _stream_wz = vx, wz
 
+            # ── Run log (10 Hz, only while armed) ────────────────────────
+            zone = (own_pos['zone'] if own_pos else -1) if frame is not None else -1
+            _run_log.log(vx, wz, zone, follower, estimator)
+
             if frame is None:
                 time.sleep(0.02)  # ~50 Hz when no camera
 
     except KeyboardInterrupt:
         logger.info("Shutting down…")
     finally:
+        _run_log.disarm()
         driver.set_velocity(0.0, 0.0)
         time.sleep(0.1)
         driver.disarm()
