@@ -56,8 +56,10 @@ lane_follower:
   no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
 
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
-  kpp: 50.0                      # steering gain — raise if turns too gentle, lower if oscillating
-  lookahead_frac: 0.50           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
+  kpp: 25.0                      # steering gain — raise if turns too gentle, lower if oscillating
+                                 # kpp≈Ly²×kp_centroid/2 ≈ 84²×0.007/2 ≈ 25 matches centroid response
+  lookahead_frac: 0.35           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
+                                 # 0.50 was too far — far strips have noisy detection, causing wz spikes
 
   # --- Recorded Path (algorithm: recorded_path) ---
   # To train: set algorithm: recorded_path, drive one loop with X button pressed,

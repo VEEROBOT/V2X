@@ -44,7 +44,13 @@ class CentroidFollower(BaseFollower):
         roi_w  = self._last_roi.shape[1] if self._last_roi is not None else 320
         target = roi_w / 2.0 + self._lane_offset
         white_err = int(self._last_cx - target) if self._last_cx is not None else None
-        return {'mode': self._mode, 'white_err': white_err, 'last_wz': round(self._last_wz, 3)}
+        return {
+            'mode':      self._mode,
+            'white_err': white_err,
+            'ly_px':     None,    # N/A for centroid
+            'n_strips':  None,    # N/A for centroid
+            'last_wz':   round(self._last_wz, 3),
+        }
 
     def process(self, frame) -> Tuple[float, float]:
         h, w  = frame.shape[:2]

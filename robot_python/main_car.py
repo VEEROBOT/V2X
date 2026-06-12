@@ -24,6 +24,7 @@ Manual emergency (from another terminal on same Pi):
 import argparse
 import csv
 import logging
+import math
 import os
 import signal
 import sys
@@ -52,7 +53,15 @@ logger = logging.getLogger('car')
 
 _LOG_PATH = os.path.expanduser('~/v2x_run.csv')
 _LOG_HZ   = 10          # rows per second written to the log
-_LOG_COLS = ['time_s', 'vx', 'wz', 'zone', 'mode', 'white_err_px', 'tags_seen']
+_LOG_COLS = [
+    'time_s', 'vx', 'wz', 'zone', 'mode',
+    'white_err_px',  # Lx for pure_pursuit, centroid error for centroid
+    'ly_px',         # lookahead y-distance (pure_pursuit only; blank for centroid)
+    'n_strips',      # number of white strips detected (pure_pursuit only)
+    'wz_enc',        # actual angular rate from encoder RPMs (rad/s)
+    'gyro_z',        # IMU yaw rate (rad/s) — independent of commanded wz
+    'tags_seen',
+]
 
 
 class RunLogger:
@@ -87,7 +96,7 @@ class RunLogger:
         logger.info("Run log closed → %s", _LOG_PATH)
 
     def log(self, vx: float, wz: float, zone: int,
-            follower, estimator):
+            follower, estimator, driver=None):
         if not self._armed or self._writer is None:
             return
         now = time.monotonic()
@@ -99,13 +108,30 @@ class RunLogger:
         _, tag_ids = estimator.get_last_detections()
         tags_str   = ';'.join(str(i) for i in tag_ids) if tag_ids else ''
 
+        wz_enc  = ''
+        gyro_z  = ''
+        if driver is not None:
+            telem = driver.get_telemetry()
+            if telem:
+                rpm  = telem['wheel_rpm']      # [FL, BL, BR, FR]
+                r    = 0.065                   # wheel_radius_m
+                k    = (2.0 * math.pi / 60.0) * r   # rpm → linear m/s
+                v_l  = (rpm[0] + rpm[1]) / 2.0 * k
+                v_r  = (rpm[2] + rpm[3]) / 2.0 * k
+                wz_enc = round((v_r - v_l) / 0.377, 3)   # track_width_m
+                gyro_z = round(telem['gyro_z'], 3)
+
         self._writer.writerow([
             round(now - self._t_start, 2),
             round(vx, 3),
             round(wz, 3),
             zone,
             info['mode'],
-            info['white_err'] if info['white_err'] is not None else '',
+            info['white_err']  if info['white_err'] is not None else '',
+            info.get('ly_px')  if info.get('ly_px')  is not None else '',
+            info.get('n_strips') if info.get('n_strips') is not None else '',
+            wz_enc,
+            gyro_z,
             tags_str,
         ])
 
@@ -439,7 +465,7 @@ def main():
             _stream_vx, _stream_wz = vx, wz
 
             # ── Run log (10 Hz, only while armed) ────────────────────────
-            _run_log.log(vx, wz, zone, follower, estimator)
+            _run_log.log(vx, wz, zone, follower, estimator, driver)
 
             if frame is None:
                 time.sleep(0.02)  # ~50 Hz when no camera

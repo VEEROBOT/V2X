@@ -50,8 +50,9 @@ class PurePursuitFollower(BaseFollower):
         super().__init__(**kwargs)
         self._kpp            = kpp
         self._lookahead_frac = lookahead_frac
-        self._last_points: List[Tuple[float, float]] = []   # (row_from_bottom, cx)
+        self._last_points:    List[Tuple[float, float]] = []   # (row_from_bottom, cx)
         self._last_lookahead: Optional[Tuple[float, float]] = None  # (Lx, Ly)
+        self._last_n_strips:  int = 0
 
     # ── Public API ───────────────────────────────────────────────────────────
     def get_mode(self) -> str:
@@ -62,10 +63,19 @@ class PurePursuitFollower(BaseFollower):
         target = roi_w / 2.0 + self._lane_offset
         # Report lateral offset at lookahead point as the "error" equivalent
         if self._last_lookahead is not None:
-            white_err = int(self._last_lookahead[0])   # Lx = lateral offset
+            lx, ly = self._last_lookahead
+            white_err = int(lx)
+            ly_px     = int(ly)
         else:
             white_err = None
-        return {'mode': self._mode, 'white_err': white_err, 'last_wz': round(self._last_wz, 3)}
+            ly_px     = None
+        return {
+            'mode':      self._mode,
+            'white_err': white_err,
+            'ly_px':     ly_px,
+            'n_strips':  self._last_n_strips,
+            'last_wz':   round(self._last_wz, 3),
+        }
 
     def process(self, frame) -> Tuple[float, float]:
         h, w  = frame.shape[:2]
@@ -83,7 +93,8 @@ class PurePursuitFollower(BaseFollower):
 
         # Scan the white mask in horizontal strips
         points = self._scan_strips(mask_w, roi_w)
-        self._last_points = points
+        self._last_points   = points
+        self._last_n_strips = len(points)
 
         white_found = len(points) > 0
         self._last_cx = points[0][1] if points else None  # near-most point for logging
