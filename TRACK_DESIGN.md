@@ -69,7 +69,7 @@ Direction of travel: **clockwise** (viewed from above).
 
 ### Inner Tags — primary zone tracking (IDs 0–9)
 
-Mounted on the wall/edge of the **inner yellow island**, facing outward so the robot sees them while driving the oval.
+Placed **flat on the track surface**, centred in the lane between the white oval line and the yellow inner island. Robot detects them at ~40–80 cm ahead as it approaches.
 
 | ID | Position (clockwise from start) | Notes |
 |----|----------------------------------|-------|
@@ -88,7 +88,7 @@ Inner oval perimeter: **≈ 6.7 m** — 10 tags at ~0.67 m spacing.
 
 ### Outer Tags — recovery reference only (IDs 10–17)
 
-Mounted on the **outer yellow boundary wall**, facing inward. Detected only when the robot drifts outside the inner oval. Triggers `off_track` warning; does not update zone.
+Placed **flat on the outer track surface** (between white oval and outer yellow boundary). Detected only when the robot drifts outside the inner lane. Triggers `off_track` warning; does not update zone.
 
 | ID | Position (clockwise from start) | Notes |
 |----|----------------------------------|-------|
@@ -113,8 +113,8 @@ Outer boundary perimeter: **≈ 9.9 m** — 8 tags at ~1.24 m spacing.
 | Outer tag size | **10 cm × 10 cm** (including black border) |
 | Printed on | White card / heavy paper |
 | Laminate | Optional — protects from scuffs |
-| Orientation | Vertical on wall, facing track centre |
-| Height from ground | Match camera height (~350 mm) |
+| Orientation | Flat on ground, centred in lane gap |
+| Height from ground | 0 mm (floor level) |
 | ID label | Write tag ID on back for reinstallation |
 
 Generate tags:
@@ -196,8 +196,8 @@ After mounting the camera at the correct height and angle:
 - [ ] Lay yellow inner island tape (inner boundary of driving lane)
 - [ ] Lay yellow outer boundary tape (outer limit of arena)
 - [ ] Print 18 AprilTags at 10 cm × 10 cm
-- [ ] Mount inner tags 0–9 on inner island wall, evenly spaced, ~350 mm height
-- [ ] Mount outer tags 10–17 on outer boundary wall, evenly spaced, ~350 mm height
+- [ ] Place inner tags 0–9 flat on track surface, centred in lane, evenly spaced
+- [ ] Place outer tags 10–17 flat on outer track surface, evenly spaced
 - [ ] Mount camera on robot at ~350 mm height, ~30° downward tilt
 - [ ] Stop v2x_car service: `sudo systemctl stop v2x_car`
 - [ ] Run `python3 main_car.py` and open http://robot-ip:5005/

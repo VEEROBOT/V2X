@@ -60,7 +60,7 @@ def load_config(path: str, role: str = '') -> dict:
 
 
 def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
-                     estimator, vx, wz):
+                     estimator, bridge, joystick, vx, wz):
     import cv2, numpy as np
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
     cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
@@ -82,16 +82,30 @@ def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
     else:
         mid = np.zeros((full_frame.shape[0] - crop_y, 640, 3), np.uint8)
 
+    # ── Status bar — row 1: position + speed ─────────────────────────────
     pos  = estimator.get_position()
     zone = pos['zone'] if pos else -1
     off  = pos.get('off_track', False) if pos else False
-    bar  = np.zeros((22, 640, 3), np.uint8)
-    parts = [f"zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", "AMBULANCE"]
-    if off: parts.append("OFF-TRACK")
-    cv2.putText(bar, "  ".join(parts), (4, 15),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 200), 1)
+    emg  = bridge.is_emergency()
+    mode = 'MANUAL' if joystick.is_manual() else 'AUTO'
 
-    streamer.push_frame(np.vstack([top, mid, bar]))
+    bar1 = np.zeros((22, 640, 3), np.uint8)
+    col1 = (0, 50, 220) if emg else (0, 200, 200)
+    row1 = [f"AMB zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", "AMBULANCE"]
+    if off: row1.append("OFF-TRACK")
+    cv2.putText(bar1, "  ".join(row1), (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, col1, 1)
+
+    # ── Status bar — row 2: mode + V2X emergency state ───────────────────
+    bar2 = np.zeros((22, 640, 3), np.uint8)
+    cv2.putText(bar2, mode, (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 215, 255), 1)
+    emg_txt = "V2X:BROADCASTING EMERGENCY" if emg else "V2X:STANDBY"
+    emg_col = (0, 50, 220) if emg else (120, 120, 120)
+    cv2.putText(bar2, emg_txt, (110, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, emg_col, 1)
+
+    streamer.push_frame(np.vstack([top, mid, bar1, bar2]))
 
 
 def main():
@@ -260,7 +274,7 @@ def main():
                     _last_stream_t = now
                     panels = follower.get_roi_panels()
                     _push_stream_amb(streamer, frame, panels, _crop_y,
-                                     estimator, vx, wz)
+                                     estimator, bridge, joystick, vx, wz)
 
     except KeyboardInterrupt:
         logger.info("Shutting down…")
