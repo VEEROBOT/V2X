@@ -35,7 +35,7 @@ import yaml
 from camera               import Camera
 from joystick             import Joystick
 from robot_driver         import RobotDriver
-from lane_follower        import LaneFollower
+from algorithms           import create_follower
 from position             import PositionEstimator
 from position_broadcaster import PositionBroadcaster
 from v2x_bridge           import V2XBridge
@@ -246,6 +246,8 @@ def main():
         deadman_button=jc.get('deadman_button', 4),
         turbo_button=jc.get('turbo_button', 5),
         arm_button=jc.get('arm_button', 7),
+        amb_arrive_button=jc.get('amb_arrive_button', 0),
+        amb_depart_button=jc.get('amb_depart_button', 1),
         axis_throttle=jc.get('axis_throttle', 1),
         axis_steering=jc.get('axis_steering', 3),
         max_speed=jc.get('max_speed', 0.4),
@@ -259,25 +261,8 @@ def main():
 
     # ── Lane follower ─────────────────────────────────────────────────────
     lc = cfg['lane_follower']
-    follower = LaneFollower(
-        linear_speed=lc['linear_speed'],
-        max_angular_speed=lc['max_angular_speed'],
-        crop_top_ratio=lc['crop_top_ratio'],
-        min_contour_area=lc['min_contour_area'],
-        kp=lc['kp'], ki=lc['ki'], kd=lc['kd'],
-        lane_offset_px=lc['lane_offset_px'],
-        white_hsv_low =(lc['white_h_low'],  lc['white_s_low'],  lc['white_v_low']),
-        white_hsv_high=(lc['white_h_high'], lc['white_s_high'], lc['white_v_high']),
-        yellow_hsv_low =(lc['yellow_h_low'],  lc['yellow_s_low'],  lc['yellow_v_low']),
-        yellow_hsv_high=(lc['yellow_h_high'], lc['yellow_s_high'], lc['yellow_v_high']),
-        cyan_hsv_low =(lc['cyan_h_low'],  lc['cyan_s_low'],  lc['cyan_v_low']),
-        cyan_hsv_high=(lc['cyan_h_high'], lc['cyan_s_high'], lc['cyan_v_high']),
-        yellow_repel_frac=lc.get('yellow_repel_frac', 0.40),
-        lost_linear_frac=lc.get('lost_linear_frac', 1.0),
-        lost_stop_s=lc.get('lost_stop_s', 4.0),
-        no_white_stop_s=lc.get('no_white_stop_s', 8.0),
-        debug=args.debug_image or lc.get('debug_image', False),
-    )
+    follower = create_follower(lc, debug=args.debug_image or lc.get('debug_image', False))
+    logger.info("Lane follower algorithm: %s", lc.get('algorithm', 'pure_pursuit'))
 
     # ── Position estimator + broadcaster ─────────────────────────────────
     pc = cfg['position']
@@ -363,6 +348,7 @@ def main():
     signal.signal(signal.SIGTERM, _sigterm)
 
     _robot_armed     = False   # starts disarmed; press Start to arm
+    _sim_emergency   = False   # set by joystick A; OR'd with real V2X — never overrides it
     _stream_vx       = 0.0
     _stream_wz       = 0.0
     _last_stream_t   = 0.0
@@ -372,6 +358,17 @@ def main():
     try:
         while True:
             # ── Start button: arm / disarm toggle ────────────────────────
+            # ── A button: simulate ambulance arrive (manual V2X test) ────
+            # ── B button: simulate ambulance depart ──────────────────────
+            # _sim_emergency is OR'd with bridge.is_emergency() so a real
+            # V2X alert can never be suppressed by the joystick.
+            if joystick.get_amb_arrive():
+                _sim_emergency = True
+                logger.info("*** SIM: ambulance ARRIVE (A button) ***")
+            if joystick.get_amb_depart():
+                _sim_emergency = False
+                logger.info("*** SIM: ambulance DEPART (B button) ***")
+
             if joystick.get_arm_press():
                 _robot_armed = not _robot_armed
                 if _robot_armed:
@@ -411,7 +408,7 @@ def main():
                 # Update emergency handler state
                 handler.update_own_position(own_pos)
                 handler.update_peer_position(peer_pos)
-                handler.update_emergency(bridge.is_emergency())
+                handler.update_emergency(bridge.is_emergency() or _sim_emergency)
 
             # ── Velocity decision — always runs, even without camera ──────
             js_cmd = joystick.get_command()

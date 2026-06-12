@@ -42,6 +42,11 @@ camera:
 # ── Lane Follower ─────────────────────────────────────────────────────────────
 lane_follower:
 
+  # --- Algorithm selection ---
+  # pure_pursuit : recommended — follows a lookahead point ahead on the line (smooth curves)
+  # centroid     : original — steers toward the averaged centroid of the line
+  algorithm: pure_pursuit
+
   # --- Speed ---
   linear_speed: 0.10             # m/s — how fast the robot drives on the line
   max_angular_speed: 0.9         # rad/s — max turn rate (keep below 1.06 to avoid wheel reversal)
@@ -49,7 +54,11 @@ lane_follower:
   lost_stop_s: 4.0               # seconds of pure LOST (no yellow either) before full stop
   no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
 
-  # --- PID steering gains ---
+  # --- Pure Pursuit tuning (algorithm: pure_pursuit) ---
+  kpp: 50.0                      # steering gain — raise if turns too gentle, lower if oscillating
+  lookahead_frac: 0.50           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
+
+  # --- Centroid PID gains (algorithm: centroid) ---
   kp: 0.007                      # proportional: higher = sharper correction
   ki: 0.0                        # integral: leave at 0 (causes wind-up on this track)
   kd: 0.0                        # derivative: disabled — amplified centroid jumps into wz spikes
@@ -146,10 +155,12 @@ emergency_handler:
 
 # ── Joystick ──────────────────────────────────────────────────────────────────
 joystick:
-  device_index:   0
-  deadman_button: 4              # hold LB to enable joystick
-  turbo_button:   5              # hold RB simultaneously for turbo
-  arm_button:     7              # press Start to arm / disarm
+  device_index:       0
+  deadman_button:     4          # hold LB to enable joystick
+  turbo_button:       5          # hold RB simultaneously for turbo
+  arm_button:         7          # press Start to arm / disarm
+  amb_arrive_button:  0          # press A to simulate ambulance arriving (V2X test)
+  amb_depart_button:  1          # press B to simulate ambulance departing
 
   # --- Speed limits ---
   max_speed:    0.30             # m/s — full stick forward (normal)

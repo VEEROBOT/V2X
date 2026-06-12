@@ -43,24 +43,28 @@ logger = logging.getLogger(__name__)
 class Joystick:
 
     def __init__(self,
-                 device_index:   int   = 0,
-                 deadman_button: int   = 4,
-                 turbo_button:   int   = 5,
-                 arm_button:     int   = 7,
-                 axis_throttle:  int   = 1,
-                 axis_steering:  int   = 3,
-                 max_speed:      float = 0.4,
-                 turbo_speed:    float = 0.8,
-                 max_steering:   float = 1.5,
-                 deadzone:       float = 0.10,
-                 accel_rate:     float = 2.0,
-                 decel_rate:     float = 4.0):
+                 device_index:       int   = 0,
+                 deadman_button:     int   = 4,
+                 turbo_button:       int   = 5,
+                 arm_button:         int   = 7,
+                 amb_arrive_button:  int   = 0,   # A button — simulate ambulance arrive
+                 amb_depart_button:  int   = 1,   # B button — simulate ambulance depart
+                 axis_throttle:      int   = 1,
+                 axis_steering:      int   = 3,
+                 max_speed:          float = 0.4,
+                 turbo_speed:        float = 0.8,
+                 max_steering:       float = 1.5,
+                 deadzone:           float = 0.10,
+                 accel_rate:         float = 2.0,
+                 decel_rate:         float = 4.0):
 
-        self._dev_idx      = device_index
-        self._deadman_btn  = deadman_button
-        self._turbo_btn    = turbo_button
-        self._arm_btn      = arm_button
-        self._ax_throttle  = axis_throttle
+        self._dev_idx          = device_index
+        self._deadman_btn      = deadman_button
+        self._turbo_btn        = turbo_button
+        self._arm_btn          = arm_button
+        self._amb_arrive_btn   = amb_arrive_button
+        self._amb_depart_btn   = amb_depart_button
+        self._ax_throttle      = axis_throttle
         self._ax_steering  = axis_steering
         self._max_speed    = max_speed
         self._turbo_speed  = turbo_speed
@@ -69,13 +73,17 @@ class Joystick:
         self._accel_rate   = accel_rate   # m/s² ramp up
         self._decel_rate   = decel_rate   # m/s² ramp down (faster stop)
 
-        self._vx              = 0.0
-        self._wz              = 0.0
-        self._vx_slewed       = 0.0   # slew-rate-limited output
-        self._deadman         = False
-        self._arm_btn_prev    = False  # for rising-edge detection
-        self._arm_press_flag  = False  # consumed by get_arm_press()
-        self._lock            = threading.Lock()
+        self._vx                   = 0.0
+        self._wz                   = 0.0
+        self._vx_slewed            = 0.0
+        self._deadman              = False
+        self._arm_btn_prev         = False
+        self._arm_press_flag       = False
+        self._amb_arrive_btn_prev  = False
+        self._amb_arrive_flag      = False
+        self._amb_depart_btn_prev  = False
+        self._amb_depart_flag      = False
+        self._lock                 = threading.Lock()
         self._running         = False
         self._js              = None
 
@@ -152,6 +160,22 @@ class Joystick:
                 return True
             return False
 
+    def get_amb_arrive(self) -> bool:
+        """Returns True once per press of the A button (ambulance-arrive simulation)."""
+        with self._lock:
+            if self._amb_arrive_flag:
+                self._amb_arrive_flag = False
+                return True
+            return False
+
+    def get_amb_depart(self) -> bool:
+        """Returns True once per press of the B button (ambulance-depart simulation)."""
+        with self._lock:
+            if self._amb_depart_flag:
+                self._amb_depart_flag = False
+                return True
+            return False
+
     # ── Background poll loop (50 Hz) ─────────────────────────────────────
     def _loop(self):
         import pygame
@@ -172,13 +196,17 @@ class Joystick:
             pygame.event.pump()
 
             try:
-                n_buttons = self._js.get_numbuttons()
-                deadman   = bool(self._js.get_button(self._deadman_btn)) \
-                            if self._deadman_btn < n_buttons else False
-                turbo     = bool(self._js.get_button(self._turbo_btn)) \
-                            if self._turbo_btn < n_buttons else False
-                arm_now   = bool(self._js.get_button(self._arm_btn)) \
-                            if self._arm_btn < n_buttons else False
+                n_buttons   = self._js.get_numbuttons()
+                deadman     = bool(self._js.get_button(self._deadman_btn)) \
+                              if self._deadman_btn < n_buttons else False
+                turbo       = bool(self._js.get_button(self._turbo_btn)) \
+                              if self._turbo_btn < n_buttons else False
+                arm_now     = bool(self._js.get_button(self._arm_btn)) \
+                              if self._arm_btn < n_buttons else False
+                arrive_now  = bool(self._js.get_button(self._amb_arrive_btn)) \
+                              if self._amb_arrive_btn < n_buttons else False
+                depart_now  = bool(self._js.get_button(self._amb_depart_btn)) \
+                              if self._amb_depart_btn < n_buttons else False
 
                 n_axes = self._js.get_numaxes()
 
@@ -211,17 +239,22 @@ class Joystick:
             except Exception as e:
                 logger.warning("Joystick read error — will reconnect: %s", e)
                 with self._lock:
-                    self._js = None   # trigger reconnect on next 5 s retry
-                deadman, arm_now, vx, wz = False, False, 0.0, 0.0
+                    self._js = None
+                deadman, arm_now, arrive_now, depart_now, vx, wz = False, False, False, False, 0.0, 0.0
                 self._vx_slewed = 0.0
 
             if not deadman:
                 # Reset slew state so next press starts from zero
                 self._vx_slewed = 0.0
 
-            # Rising-edge detection for arm button
-            arm_press = arm_now and not self._arm_btn_prev
-            self._arm_btn_prev = arm_now
+            # Rising-edge detection
+            arm_press    = arm_now    and not self._arm_btn_prev
+            arrive_press = arrive_now and not self._amb_arrive_btn_prev
+            depart_press = depart_now and not self._amb_depart_btn_prev
+
+            self._arm_btn_prev        = arm_now
+            self._amb_arrive_btn_prev = arrive_now
+            self._amb_depart_btn_prev = depart_now
 
             with self._lock:
                 self._deadman = deadman
@@ -229,5 +262,9 @@ class Joystick:
                 self._wz      = wz
                 if arm_press:
                     self._arm_press_flag = True
+                if arrive_press:
+                    self._amb_arrive_flag = True
+                if depart_press:
+                    self._amb_depart_flag = True
 
             time.sleep(0.02)   # 50 Hz
