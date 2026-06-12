@@ -46,10 +46,12 @@ class PurePursuitFollower(BaseFollower):
     def __init__(self, *,
                  kpp:            float = 50.0,
                  lookahead_frac: float = 0.50,
+                 ly_min_px:      float = 35.0,
                  **kwargs):
         super().__init__(**kwargs)
         self._kpp            = kpp
         self._lookahead_frac = lookahead_frac
+        self._ly_min         = float(ly_min_px)
         self._last_points:    List[Tuple[float, float]] = []   # (row_from_bottom, cx)
         self._last_lookahead: Optional[Tuple[float, float]] = None  # (Lx, Ly)
         self._last_n_strips:  int = 0
@@ -119,16 +121,20 @@ class PurePursuitFollower(BaseFollower):
             self._lost_start = None
             self._mode = 'WHITE'
 
-            # Pure pursuit curvature and angular rate
-            l_sq = lx * lx + ly * ly
+            # Pure pursuit curvature and angular rate.
+            # ly_min prevents formula blow-up when only near strips detected.
+            ly_safe = max(ly, self._ly_min)
+            l_sq = lx * lx + ly_safe * ly_safe
             curvature = (2.0 * lx / l_sq) if l_sq > 1.0 else 0.0
             wz = float(np.clip(-self._kpp * curvature,
                                 -self._max_angular, self._max_angular))
             self._last_wz = wz
 
-            # Speed: slow down proportionally with lateral offset at lookahead
+            # Speed: gentle reduction so inner wheel stays above IK-clamp threshold.
+            # 0.70 was too aggressive — at max error vx dropped to 0.03 m/s, clamping
+            # the inner wheel to 0 and killing turning ability.
             err_ratio = min(abs(lx) / 120.0, 1.0)
-            vx_cmd = self._linear_speed * (1.0 - 0.70 * err_ratio)
+            vx_cmd = self._linear_speed * (1.0 - 0.40 * err_ratio)
             return vx_cmd, wz
 
         # ── Priority 2: yellow boundary — repel ─────────────────────────────

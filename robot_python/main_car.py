@@ -249,6 +249,7 @@ def main():
         track_width=rc['track_width_m'],
         max_wheel_speed=rc['max_wheel_speed_rad_s'],
         cmd_timeout=rc['cmd_vel_timeout_s'],
+        allow_wheel_reversal=rc.get('allow_wheel_reversal', False),
     )
     driver.start()
     time.sleep(1.0)   # wait for STM32 ROS-mode init

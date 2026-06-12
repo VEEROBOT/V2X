@@ -54,12 +54,14 @@ class RobotDriver:
                  wheel_radius: float = 0.065,
                  track_width: float = 0.377,
                  max_wheel_speed: float = 15.7,
-                 cmd_timeout: float = _CMD_TIMEOUT_S):
+                 cmd_timeout: float = _CMD_TIMEOUT_S,
+                 allow_wheel_reversal: bool = False):
 
-        self._wheel_radius    = wheel_radius
-        self._track_width     = track_width
-        self._max_wheel_speed = max_wheel_speed
-        self._cmd_timeout     = cmd_timeout
+        self._wheel_radius        = wheel_radius
+        self._track_width         = track_width
+        self._max_wheel_speed     = max_wheel_speed
+        self._cmd_timeout         = cmd_timeout
+        self._allow_wheel_reversal = allow_wheel_reversal
 
         self._transport = SerialTransport(port, baudrate, timeout=0.0)
 
@@ -226,14 +228,16 @@ class RobotDriver:
         half = self._track_width / 2.0
         v_l  = vx - wz * half
         v_r  = vx + wz * half
-        # When driving forward, don't let either wheel reverse — prevents spin-out on tight turns.
-        # The inner wheel is clamped to zero; the robot arcs as tight as geometry allows.
-        if vx > 0:
-            v_l = max(v_l, 0.0)
-            v_r = max(v_r, 0.0)
-        elif vx < 0:
-            v_l = min(v_l, 0.0)
-            v_r = min(v_r, 0.0)
+        if not self._allow_wheel_reversal:
+            # Clamp inner wheel to zero — prevents spin-out but limits yaw rate when
+            # vx is low (inner wheel would need to reverse for full differential).
+            # Set allow_wheel_reversal: true in config if curves are understeered.
+            if vx > 0:
+                v_l = max(v_l, 0.0)
+                v_r = max(v_r, 0.0)
+            elif vx < 0:
+                v_l = min(v_l, 0.0)
+                v_r = min(v_r, 0.0)
         w_l  = max(min(v_l / self._wheel_radius, self._max_wheel_speed), -self._max_wheel_speed)
         w_r  = max(min(v_r / self._wheel_radius, self._max_wheel_speed), -self._max_wheel_speed)
         return [w_l, w_l, w_r, w_r]  # [FL, BL, BR, FR]

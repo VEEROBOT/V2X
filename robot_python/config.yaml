@@ -29,6 +29,8 @@ robot:
   track_width_m: 0.377
   max_wheel_speed_rad_s: 15.7
   cmd_vel_timeout_s: 0.5
+  allow_wheel_reversal: true   # inner wheel may reverse during tight turns for full yaw authority
+                                # false = clamp inner wheel to 0 (prevents spin-out but limits curves)
 
 
 # ── Camera ────────────────────────────────────────────────────────────────────
@@ -56,14 +58,16 @@ lane_follower:
   no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
 
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
-  kpp: 25.0                      # steering gain — raise if turns too gentle, lower if oscillating
-                                 # kpp≈Ly²×kp_centroid/2 ≈ 84²×0.007/2 ≈ 25 matches centroid response
+  # kpp=25 was too weak: max wz only 0.37 rad/s, robot achieved only 13% actual on curves.
+  # kpp=50 caused instability when Ly was tiny (small n_strips). ly_min_px prevents that.
+  kpp: 40.0                      # steering gain — raise if turns too gentle, lower if oscillating
   lookahead_frac: 0.35           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
-                                 # 0.50 was too far — far strips have noisy detection, causing wz spikes
+  ly_min_px: 30                  # minimum Ly in formula — prevents blow-up when only near strips detected
 
   # --- Recorded Path (algorithm: recorded_path) ---
-  # To train: set algorithm: recorded_path, drive one loop with X button pressed,
-  # press X again to save.  File persists at ~/v2x_training.json across reboots.
+  # How to record: arm with Start, hold deadman (LB), press X → "Training STARTED".
+  # Drive one full clockwise loop (tag 0 back to tag 0). Press X again → saved.
+  # Release deadman — robot blends 70% learned curvature + 30% live camera.
   use_training_data: true        # false = ignore training file, behave like pure_pursuit
   training_data_file: ~/v2x_training.json
   ff_blend: 0.70                 # 0=pure camera  1=pure training  0.7=recommended
@@ -192,7 +196,7 @@ control:
 # ── Per-robot overrides ───────────────────────────────────────────────────────
 car:
   lane_follower:
-    linear_speed: 0.10
+    linear_speed: 0.08           # slower than default (0.10) — robot physically can't turn at 0.10 on curves
   v2x_bridge:
     obu_loop_count: 1
   control:
