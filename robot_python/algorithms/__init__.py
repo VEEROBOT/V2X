@@ -12,8 +12,9 @@ To add a new algorithm:
     3. Set  lane_follower.algorithm: my_algo  in config.yaml.
 """
 
-from .centroid      import CentroidFollower
-from .pure_pursuit  import PurePursuitFollower
+from .centroid       import CentroidFollower
+from .pure_pursuit   import PurePursuitFollower
+from .recorded_path  import RecordedPathFollower
 
 
 def create_follower(lc: dict, debug: bool = False):
@@ -39,6 +40,11 @@ def create_follower(lc: dict, debug: bool = False):
         debug             = debug,
     )
 
+    pp_params = dict(
+        kpp            = lc.get('kpp', 50.0),
+        lookahead_frac = lc.get('lookahead_frac', 0.50),
+    )
+
     if algo == 'centroid':
         return CentroidFollower(
             kp = lc.get('kp', 0.007),
@@ -48,11 +54,16 @@ def create_follower(lc: dict, debug: bool = False):
         )
 
     if algo == 'pure_pursuit':
-        return PurePursuitFollower(
-            kpp            = lc.get('kpp', 50.0),
-            lookahead_frac = lc.get('lookahead_frac', 0.50),
+        return PurePursuitFollower(**pp_params, **common)
+
+    if algo == 'recorded_path':
+        return RecordedPathFollower(
+            use_training_data  = lc.get('use_training_data',  True),
+            training_data_file = lc.get('training_data_file', '~/v2x_training.json'),
+            ff_blend           = lc.get('ff_blend',            0.70),
+            **pp_params,
             **common,
         )
 
     raise ValueError(f"Unknown lane follower algorithm: {algo!r}. "
-                     f"Valid choices: centroid, pure_pursuit")
+                     f"Valid choices: centroid, pure_pursuit, recorded_path")

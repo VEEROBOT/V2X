@@ -71,6 +71,9 @@ class BaseFollower(ABC):
         self._last_cx     = None   # white x-position (meaning depends on algorithm)
         self._last_ycx    = None   # yellow centroid x
 
+        # Current zone — updated by main_car via set_zone() each loop tick
+        self._current_zone = -1
+
     # ── Abstract interface ───────────────────────────────────────────────────
     @abstractmethod
     def process(self, frame) -> Tuple[float, float]:
@@ -87,6 +90,22 @@ class BaseFollower(ABC):
     @abstractmethod
     def get_roi_panels(self) -> Optional[np.ndarray]:
         ...
+
+    def set_zone(self, zone: int):
+        """Called by main_car each loop tick so algorithms can use zone info."""
+        self._current_zone = zone
+
+    def is_boundary_near(self) -> bool:
+        """
+        True when yellow tape is close to the robot (bottom half of ROI has
+        significant yellow pixels).  Used by emergency_handler to detect
+        when the robot has reached the inner island line.
+        """
+        if self._last_mask_y is None:
+            return False
+        h = self._last_mask_y.shape[0]
+        near = self._last_mask_y[h // 2:, :]   # bottom half = near the robot
+        return int(near.sum()) > self._min_area * 255 * 2
 
     def reset_pid(self):
         self._integral       = 0.0

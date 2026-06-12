@@ -49,6 +49,7 @@ class Joystick:
                  arm_button:         int   = 7,
                  amb_arrive_button:  int   = 0,   # A button — simulate ambulance arrive
                  amb_depart_button:  int   = 1,   # B button — simulate ambulance depart
+                 train_button:       int   = 2,   # X button — toggle training recording
                  axis_throttle:      int   = 1,
                  axis_steering:      int   = 3,
                  max_speed:          float = 0.4,
@@ -64,6 +65,7 @@ class Joystick:
         self._arm_btn          = arm_button
         self._amb_arrive_btn   = amb_arrive_button
         self._amb_depart_btn   = amb_depart_button
+        self._train_btn        = train_button
         self._ax_throttle      = axis_throttle
         self._ax_steering  = axis_steering
         self._max_speed    = max_speed
@@ -83,6 +85,8 @@ class Joystick:
         self._amb_arrive_flag      = False
         self._amb_depart_btn_prev  = False
         self._amb_depart_flag      = False
+        self._train_btn_prev       = False
+        self._train_toggle_flag    = False
         self._lock                 = threading.Lock()
         self._running         = False
         self._js              = None
@@ -176,6 +180,14 @@ class Joystick:
                 return True
             return False
 
+    def get_train_toggle(self) -> bool:
+        """Returns True once per press of the X button (toggle training recording)."""
+        with self._lock:
+            if self._train_toggle_flag:
+                self._train_toggle_flag = False
+                return True
+            return False
+
     # ── Background poll loop (50 Hz) ─────────────────────────────────────
     def _loop(self):
         import pygame
@@ -207,6 +219,8 @@ class Joystick:
                               if self._amb_arrive_btn < n_buttons else False
                 depart_now  = bool(self._js.get_button(self._amb_depart_btn)) \
                               if self._amb_depart_btn < n_buttons else False
+                train_now   = bool(self._js.get_button(self._train_btn)) \
+                              if self._train_btn < n_buttons else False
 
                 n_axes = self._js.get_numaxes()
 
@@ -240,7 +254,7 @@ class Joystick:
                 logger.warning("Joystick read error — will reconnect: %s", e)
                 with self._lock:
                     self._js = None
-                deadman, arm_now, arrive_now, depart_now, vx, wz = False, False, False, False, 0.0, 0.0
+                deadman, arm_now, arrive_now, depart_now, train_now, vx, wz = False, False, False, False, False, 0.0, 0.0
                 self._vx_slewed = 0.0
 
             if not deadman:
@@ -251,10 +265,12 @@ class Joystick:
             arm_press    = arm_now    and not self._arm_btn_prev
             arrive_press = arrive_now and not self._amb_arrive_btn_prev
             depart_press = depart_now and not self._amb_depart_btn_prev
+            train_press  = train_now  and not self._train_btn_prev
 
             self._arm_btn_prev        = arm_now
             self._amb_arrive_btn_prev = arrive_now
             self._amb_depart_btn_prev = depart_now
+            self._train_btn_prev      = train_now
 
             with self._lock:
                 self._deadman = deadman
@@ -266,5 +282,7 @@ class Joystick:
                     self._amb_arrive_flag = True
                 if depart_press:
                     self._amb_depart_flag = True
+                if train_press:
+                    self._train_toggle_flag = True
 
             time.sleep(0.02)   # 50 Hz

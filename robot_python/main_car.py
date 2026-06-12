@@ -248,6 +248,7 @@ def main():
         arm_button=jc.get('arm_button', 7),
         amb_arrive_button=jc.get('amb_arrive_button', 0),
         amb_depart_button=jc.get('amb_depart_button', 1),
+        train_button=jc.get('train_button', 2),
         axis_throttle=jc.get('axis_throttle', 1),
         axis_steering=jc.get('axis_steering', 3),
         max_speed=jc.get('max_speed', 0.4),
@@ -354,6 +355,7 @@ def main():
     _last_stream_t   = 0.0
     _crop_y          = int(lc['crop_top_ratio'] * cc['height'])
     _run_log         = RunLogger()
+    own_pos          = None    # last known position (survives frames where camera unavailable)
 
     try:
         while True:
@@ -368,6 +370,8 @@ def main():
             if joystick.get_amb_depart():
                 _sim_emergency = False
                 logger.info("*** SIM: ambulance DEPART (B button) ***")
+            if joystick.get_train_toggle() and hasattr(follower, 'toggle_training'):
+                follower.toggle_training()
 
             if joystick.get_arm_press():
                 _robot_armed = not _robot_armed
@@ -410,15 +414,23 @@ def main():
                 handler.update_peer_position(peer_pos)
                 handler.update_emergency(bridge.is_emergency() or _sim_emergency)
 
+            # ── Zone sync — tell the follower which zone we're in ─────────
+            zone = own_pos['zone'] if own_pos else -1
+            follower.set_zone(zone)
+
             # ── Velocity decision — always runs, even without camera ──────
             js_cmd = joystick.get_command()
             if js_cmd is not None:
-                # Joystick (deadman held) — bypass lane follower and emergency handler
+                # Joystick (deadman held) — bypass follower and emergency handler
                 vx, wz = js_cmd
+                # Record samples if training is active (recorded_path algorithm)
+                if hasattr(follower, 'record') and follower.is_recording():
+                    follower.record(vx, wz, zone)
             elif frame is not None:
                 # Autonomous — lane following through emergency handler
                 vx, wz = follower.process(frame)
-                vx, wz = handler.process(vx, wz)
+                vx, wz = handler.process(vx, wz,
+                                          boundary_near=follower.is_boundary_near())
             else:
                 # No camera, no joystick — hold stop
                 vx, wz = 0.0, 0.0
@@ -427,7 +439,6 @@ def main():
             _stream_vx, _stream_wz = vx, wz
 
             # ── Run log (10 Hz, only while armed) ────────────────────────
-            zone = (own_pos['zone'] if own_pos else -1) if frame is not None else -1
             _run_log.log(vx, wz, zone, follower, estimator)
 
             if frame is None:

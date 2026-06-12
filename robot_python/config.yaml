@@ -43,8 +43,9 @@ camera:
 lane_follower:
 
   # --- Algorithm selection ---
-  # pure_pursuit : recommended — follows a lookahead point ahead on the line (smooth curves)
-  # centroid     : original — steers toward the averaged centroid of the line
+  # pure_pursuit   : camera-only — follows a lookahead point on the line (smooth curves)
+  # recorded_path  : camera + training data — blends learned curvature with live camera
+  # centroid       : original — steers toward the averaged centroid of the line
   algorithm: pure_pursuit
 
   # --- Speed ---
@@ -54,9 +55,16 @@ lane_follower:
   lost_stop_s: 4.0               # seconds of pure LOST (no yellow either) before full stop
   no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
 
-  # --- Pure Pursuit tuning (algorithm: pure_pursuit) ---
+  # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
   kpp: 50.0                      # steering gain — raise if turns too gentle, lower if oscillating
   lookahead_frac: 0.50           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
+
+  # --- Recorded Path (algorithm: recorded_path) ---
+  # To train: set algorithm: recorded_path, drive one loop with X button pressed,
+  # press X again to save.  File persists at ~/v2x_training.json across reboots.
+  use_training_data: true        # false = ignore training file, behave like pure_pursuit
+  training_data_file: ~/v2x_training.json
+  ff_blend: 0.70                 # 0=pure camera  1=pure training  0.7=recommended
 
   # --- Centroid PID gains (algorithm: centroid) ---
   kp: 0.007                      # proportional: higher = sharper correction
@@ -142,9 +150,10 @@ v2x_bridge:
 
 # ── Emergency Handler (car only) ─────────────────────────────────────────────
 emergency_handler:
-  evasion_linear_speed: 0.20
-  evasion_angular_speed: 0.9
-  evasion_duration_s: 2.0
+  evasion_linear_speed: 0.08    # slow forward veer (was 0.20 — too fast)
+  evasion_angular_speed: -0.20  # negative = RIGHT turn = toward inner island (clockwise driving)
+                                 # was +0.9 which caused hard LEFT spin into outer wall
+  evasion_duration_s: 6.0       # backup timer if camera doesn't see inner yellow (was 2.0)
   hold_timeout_s: 30.0
   clear_delay_s: 1.0
   resume_ramp_duration_s: 2.0
@@ -161,6 +170,7 @@ joystick:
   arm_button:         7          # press Start to arm / disarm
   amb_arrive_button:  0          # press A to simulate ambulance arriving (V2X test)
   amb_depart_button:  1          # press B to simulate ambulance departing
+  train_button:       2          # press X to start/stop training recording
 
   # --- Speed limits ---
   max_speed:    0.30             # m/s — full stick forward (normal)

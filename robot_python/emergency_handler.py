@@ -101,9 +101,13 @@ class EmergencyHandler:
         return self._state
 
     # ── Main tick ────────────────────────────────────────────────────────────
-    def process(self, vx: float, wz: float) -> Tuple[float, float]:
+    def process(self, vx: float, wz: float,
+                boundary_near: bool = False) -> Tuple[float, float]:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
+        boundary_near — True when the camera sees yellow tape close ahead
+                        (inner island line); triggers early HOLDING transition
+                        so the robot stops on the line rather than overrunning it.
         """
         self._last_vx = vx
         self._last_wz = wz
@@ -119,7 +123,10 @@ class EmergencyHandler:
             return vx, wz
 
         elif self._state == _EVADING:
-            if elapsed >= self._ev_dur:
+            if boundary_near:
+                logger.info("EVADING → HOLDING: inner boundary detected by camera")
+                self._enter(_HOLDING, now)
+            elif elapsed >= self._ev_dur:
                 self._enter(_HOLDING, now)
             return self._ev_linear, self._ev_angular
 
