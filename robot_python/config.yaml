@@ -176,15 +176,21 @@ v2x_bridge:
 
 # ── Emergency Handler (car only) ─────────────────────────────────────────────
 emergency_handler:
-  # ── EVADING: robot veers RIGHT to inner island ───────────────────────────
+  # ── Direction ─────────────────────────────────────────────────────────────
+  driving_direction: clockwise  # clockwise or counterclockwise
+                                 # determines which side the inner island is on:
+                                 #   clockwise      → inner island to robot's RIGHT
+                                 #   counterclockwise → inner island to robot's LEFT
+                                 # all angular speeds below are MAGNITUDES — the handler
+                                 # applies the correct sign automatically.
+
+  # ── EVADING: robot veers toward inner island ─────────────────────────────
   evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
-  evasion_angular_speed: -0.35  # fallback RIGHT turn when no yellow visible
-                                 # -0.60 was too aggressive: inner wheel reversed, robot pivoted
-                                 # instead of arcing → overshot inner yellow into the island
-                                 # negative = RIGHT = toward inner island (clockwise driving)
+  evasion_angular_speed: 0.35   # magnitude of fallback turn when no yellow visible
+                                 # 0.60 was too aggressive (inner wheel reversed, robot pivoted
+                                 # → overshot the inner island)
   evasion_duration_s: 6.0       # backup timer if boundary_near never fires
-  min_evasion_s: 0.2            # ignore boundary_near for first 0.2s only
-                                 # was 0.5 which allowed too much rotation before stopping
+  min_evasion_s: 0.2            # ignore boundary_near for first 0.2s
   # Yellow-tracking proportional control (active once yellow centroid is visible):
   #   err = yellow_cx / frame_w - evasion_yellow_target
   #   wz  = evasion_yellow_kp * err - 0.15   (clamped to [evasion_angular_speed, -0.05])
@@ -197,9 +203,9 @@ emergency_handler:
   hold_timeout_s: 30.0
   clear_delay_s: 1.0
 
-  # ── RECOVERING: drive LEFT back to white line ─────────────────────────────
+  # ── RECOVERING: drive back to white line ────────────────────────────────
   recovery_linear_speed: 0.08   # forward speed during outward arc
-  recovery_angular_speed: 0.45  # positive = LEFT = back toward white line (was 0.30, too weak)
+  recovery_angular_speed: 0.45  # magnitude — toward outer lane (away from inner island)
   recovery_duration_s: 2.5      # fallback timeout if white not found
   resume_ramp_duration_s: 2.0
 
