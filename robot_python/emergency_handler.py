@@ -227,24 +227,30 @@ class EmergencyHandler:
         elif self._state == _HOLDING:
             self._check_holding(now, elapsed)
             if self._ev_side > 0:
-                # Inner evasion: inner island is a physical barrier — hard approach is safe.
+                # Inner evasion: slow creep against physical island wall.
+                hold_vx = self._hold_vx
                 hold_wz = self._yellow_steer(yellow_cx, frame_w,
                                              max_toward=-self._dir * self._ev_side * 0.25,
                                              max_ease=self._dir * self._ev_side * 0.05,
                                              bias=-self._dir * self._ev_side * 0.10,
                                              rescue_wz=self._dir * self._ev_side * 0.10)
             else:
-                # Outer evasion: thin tape, curved track — hard approach causes oscillation
-                # and crossing. Use half the max turn, no bias, wz=0 when no yellow.
+                # Outer evasion: drive ALONG the outer yellow line (not hug — it's tape,
+                # not a wall).  Right bias keeps the robot curving with the boundary;
+                # yellow at rel≈0.30 (left) is the new guide like the white line.
+                hold_vx = self._ev_linear   # normal evasion speed, not slow creep
                 if yellow_cx is None:
-                    hold_wz = 0.0   # no feedback → drive straight, don't approach blind
+                    # Yellow gone → ease right (likely drifted past tape or thin section)
+                    hold_wz = self._dir * self._ev_side * 0.08   # CW outer: -0.08 (right)
                 else:
+                    # Yellow visible: proportional controller with right bias so robot
+                    # naturally curves along the outer boundary.
                     hold_wz = self._yellow_steer(yellow_cx, frame_w,
                                                  max_toward=-self._dir * self._ev_side * 0.12,
-                                                 max_ease=self._dir * self._ev_side * 0.05,
-                                                 bias=0.0,
+                                                 max_ease=self._dir * self._ev_side * 0.08,
+                                                 bias=self._dir * self._ev_side * 0.05,
                                                  rescue_wz=self._dir * self._ev_side * 0.05)
-            return self._hold_vx, hold_wz
+            return hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
         elif self._state == _RECOVERING:
