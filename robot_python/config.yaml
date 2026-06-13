@@ -150,7 +150,7 @@ position:
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
-  run_log: true                  # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
+  run_log: false                 # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
 
 
 # ── Vision Stream (browser) ───────────────────────────────────────────────────
