@@ -143,7 +143,8 @@ class EmergencyHandler:
                 boundary_near: bool          = False,
                 white_found:   bool          = False,
                 yellow_cx:     Optional[float] = None,
-                frame_w:       int           = 320) -> Tuple[float, float]:
+                frame_w:       int           = 320,
+                outer_tag:     bool          = False) -> Tuple[float, float]:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
 
@@ -154,6 +155,8 @@ class EmergencyHandler:
         yellow_cx     — pixel X of yellow centroid in the camera frame (None if not seen);
                         used for proportional steering during EVADING and HOLDING.
         frame_w       — camera frame width in pixels (default 320).
+        outer_tag     — True when an outer boundary AprilTag (IDs 10-17) was detected;
+                        robot has drifted past the white line during RECOVERING — stop arc.
         """
         self._last_vx = vx
         self._last_wz = wz
@@ -206,7 +209,12 @@ class EmergencyHandler:
             # Tag seen during recovery = robot has a position fix near the oval
             tag_seen = (self._own_zone_t > self._state_time + 0.3)
 
-            if white_found:
+            if outer_tag:
+                # Outer boundary tag visible — robot has overshot the white line
+                # and is approaching the outer yellow.  Stop the outward arc now.
+                logger.warning("RECOVERING → RESUMING: outer tag seen — overshot white line")
+                self._enter(_RESUMING, now)
+            elif white_found:
                 logger.info("RECOVERING → RESUMING: white line re-acquired"
                             + (" (tag z=%d)" % self._own_zone if tag_seen else ""))
                 self._enter(_RESUMING, now)

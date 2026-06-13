@@ -477,6 +477,7 @@ def main():
                     boundary_near = follower.is_boundary_near(),
                     white_found   = (dbg.get('mode') == 'WHITE'),
                     yellow_cx     = dbg.get('yellow_cx'),
+                    outer_tag     = estimator.is_off_track(),
                 )
             else:
                 # No camera, no joystick — hold stop
