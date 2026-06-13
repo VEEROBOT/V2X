@@ -312,8 +312,8 @@ class EmergencyHandler:
         if not self._emergency:
             return False
         if not self._position_known():
-            logger.warning("Position unknown — yielding on V2X signal alone (fallback)")
-            return True
+            logger.info("Emergency active — waiting for position fix before yielding")
+            return False
         behind = self._is_amb_behind()
         gap    = self._amb_gap()
         if behind and gap <= self._yield_gap:
