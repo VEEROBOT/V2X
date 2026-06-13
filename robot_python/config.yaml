@@ -150,7 +150,7 @@ position:
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
-  run_log: true                  # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
+  run_log: false                  # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
 
 
 # ── Vision Stream (browser) ───────────────────────────────────────────────────
@@ -189,28 +189,31 @@ emergency_handler:
                                  # all angular speeds below are MAGNITUDES — the handler
                                  # applies the correct sign automatically.
 
-  # ── EVADING: robot veers toward inner island ─────────────────────────────
-  evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
-  evasion_angular_speed: 0.35   # magnitude of fallback turn when no yellow visible
-                                 # 0.60 was too aggressive (inner wheel reversed, robot pivoted
-                                 # → overshot the inner island)
-  evasion_duration_s: 6.0       # backup timer if boundary_near never fires
-  min_evasion_s: 0.2            # ignore boundary_near for first 0.2s
+  # ── EVADING: arc toward inner island (Chandrayaan approach) ─────────────
+  # Forward-dominated arc: robot curves gently toward the inner yellow rather
+  # than pivoting sharply.  At equilibrium (yellow at target fraction of frame)
+  # the robot drives STRAIGHT — tangentially alongside the inner island.
+  evasion_linear_speed: 0.08    # ~60% forward — dominant component keeps robot moving
+  evasion_angular_speed: 0.25   # ~40% turn — gentle curve, not a pivot
+                                 # (0.60 was too aggressive → inner wheel reversed → overshoot)
+  evasion_duration_s: 6.0       # backup timer if boundary never fires
+  min_evasion_s: 0.2            # ignore boundary for first 0.2s (yellow may already be visible)
   # Yellow-tracking proportional control (active once yellow centroid is visible):
   #   err = yellow_cx / frame_w - evasion_yellow_target
   #   wz  = evasion_yellow_kp * err - 0.15   (clamped to [evasion_angular_speed, -0.05])
   evasion_yellow_target: 0.70   # want yellow at 70% across frame (right side = inner island)
   evasion_yellow_kp: 2.5        # gain per frame-width fraction (2.5 × 0.20 err = 0.50 wz)
 
-  # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
-  hold_linear_speed: 0.04       # creep forward so robot moves with traffic (not a stationary obstacle)
-                                 # yellow tracking keeps robot pinned to inner island during hold
+  # ── HOLDING: creep along inner yellow ───────────────────────────────────
+  hold_linear_speed: 0.04       # slow forward — robot moves with traffic alongside inner island
+                                 # yellow tracking (bias=0) keeps robot parallel, not crossing
   hold_timeout_s: 30.0
   clear_delay_s: 1.0
 
-  # ── RECOVERING: drive back to white line ────────────────────────────────
-  recovery_linear_speed: 0.08   # forward speed during outward arc
-  recovery_angular_speed: 0.45  # magnitude — toward outer lane (away from inner island)
+  # ── RECOVERING: symmetric arc back to white line ────────────────────────
+  recovery_linear_speed: 0.08   # same as evasion — symmetric arc outward
+  recovery_angular_speed: 0.20  # was 0.45 — same gentle curve as evasion but outward
+                                 # (0.45 with vx=0.08 caused inner wheel reversal — too sharp)
   recovery_duration_s: 2.5      # fallback timeout if white not found
   resume_ramp_duration_s: 2.0
 

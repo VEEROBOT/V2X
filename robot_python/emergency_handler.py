@@ -171,33 +171,43 @@ class EmergencyHandler:
 
         # ── EVADING ─────────────────────────────────────────────────────────
         elif self._state == _EVADING:
-            # Respect min_evasion_s so boundary_near can't skip before we move
             past_min = elapsed >= self._ev_min
-            if past_min and boundary_near:
-                logger.info("EVADING → HOLDING: inner boundary detected (%.1fs elapsed)", elapsed)
+
+            # Two proximity triggers for → HOLDING:
+            # 1. boundary_near: yellow in bottom half of frame (approaching head-on)
+            # 2. yellow_at_boundary: yellow centroid past 78% of frame toward inner island
+            #    (catches side-approach where yellow is a vertical strip, never bottom-half)
+            yellow_rel = (yellow_cx / frame_w) if yellow_cx is not None else 0.0
+            yellow_at_boundary = yellow_cx is not None and \
+                                  (yellow_rel - 0.50) * self._dir >= 0.28
+            if past_min and (boundary_near or yellow_at_boundary):
+                logger.info("EVADING → HOLDING: %s (%.1fs elapsed)",
+                            "boundary_near" if boundary_near else "yellow_at_boundary",
+                            elapsed)
                 self._enter(_HOLDING, now)
             elif elapsed >= self._ev_dur:
                 logger.info("EVADING → HOLDING: evasion timer expired")
                 self._enter(_HOLDING, now)
-            # Yellow-guided steering: proportional control to bring yellow to right edge.
-            # No yellow visible → hard right (ev_angular). Yellow visible → ease off as
-            # robot approaches inner island. Never turns LEFT during evasion (max_left=-0.05).
+
+            # Chandrayaan arc: bias=0 means at equilibrium (yellow at target) the robot
+            # goes STRAIGHT — arcing tangentially toward the inner yellow, not pivoting.
+            # max_ease allows a small outward nudge if yellow gets too close.
             ev_wz = self._yellow_steer(yellow_cx, frame_w,
                                        max_toward=self._ev_angular,
-                                       max_ease=-self._dir * 0.05,
-                                       bias=-self._dir * 0.15,
+                                       max_ease=self._dir * 0.10,
+                                       bias=0.0,
                                        rescue_wz=self._dir * 0.20)
             return self._ev_linear, ev_wz
 
         # ── HOLDING ──────────────────────────────────────────────────────────
         elif self._state == _HOLDING:
             self._check_holding(now, elapsed)
-            # Slow creep while hugging inner yellow — keeps robot moving with traffic
-            # and maintains position against the island rather than sitting in the lane.
+            # Slow creep along inner yellow — same Chandrayaan arc logic keeps the
+            # robot parallel to the inner island rather than drifting across it.
             hold_wz = self._yellow_steer(yellow_cx, frame_w,
-                                         max_toward=-self._dir * 0.25,
-                                         max_ease=self._dir * 0.05,
-                                         bias=-self._dir * 0.10,
+                                         max_toward=-self._dir * 0.20,
+                                         max_ease=self._dir * 0.10,
+                                         bias=0.0,
                                          rescue_wz=self._dir * 0.10)
             return self._hold_vx, hold_wz
 
