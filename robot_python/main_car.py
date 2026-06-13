@@ -330,15 +330,19 @@ def main():
     # ── Emergency handler ─────────────────────────────────────────────────
     ec = cfg['emergency_handler']
     handler = EmergencyHandler(
-        evasion_linear_speed=ec['evasion_linear_speed'],
-        evasion_angular_speed=ec['evasion_angular_speed'],
-        evasion_duration_s=ec['evasion_duration_s'],
-        hold_timeout_s=ec['hold_timeout_s'],
-        clear_delay_s=ec['clear_delay_s'],
-        resume_ramp_duration_s=ec['resume_ramp_duration_s'],
-        n_tags=ec['n_tags'],
-        yield_zone_gap=ec['yield_zone_gap'],
-        position_timeout_s=ec['position_timeout_s'],
+        evasion_linear_speed   = ec['evasion_linear_speed'],
+        evasion_angular_speed  = ec['evasion_angular_speed'],
+        evasion_duration_s     = ec['evasion_duration_s'],
+        min_evasion_s          = ec.get('min_evasion_s', 0.5),
+        recovery_linear_speed  = ec.get('recovery_linear_speed',  0.08),
+        recovery_angular_speed = ec.get('recovery_angular_speed', 0.30),
+        recovery_duration_s    = ec.get('recovery_duration_s',    2.5),
+        hold_timeout_s         = ec['hold_timeout_s'],
+        clear_delay_s          = ec['clear_delay_s'],
+        resume_ramp_duration_s = ec['resume_ramp_duration_s'],
+        n_tags                 = ec['n_tags'],
+        yield_zone_gap         = ec['yield_zone_gap'],
+        position_timeout_s     = ec['position_timeout_s'],
     )
 
     # ── Vision stream (desktop browser) ──────────────────────────────────
@@ -456,8 +460,11 @@ def main():
             elif frame is not None:
                 # Autonomous — lane following through emergency handler
                 vx, wz = follower.process(frame)
-                vx, wz = handler.process(vx, wz,
-                                          boundary_near=follower.is_boundary_near())
+                vx, wz = handler.process(
+                    vx, wz,
+                    boundary_near = follower.is_boundary_near(),
+                    white_found   = (follower.get_debug_info().get('mode') == 'WHITE'),
+                )
             else:
                 # No camera, no joystick — hold stop
                 vx, wz = 0.0, 0.0

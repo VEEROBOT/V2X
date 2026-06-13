@@ -696,3 +696,19 @@ If missing, unplug and re-plug the USB dongle.
 - **Keys must be cleared together** — if RSU re-registers, OBU must re-register or KC1/KC2 will fail.
 - **STM32 USB must be unplugged** during normal operation — USB overrides UART on the STM32 board.
 - **RPi 5 older kernels (≤6.8.0-1031)** expose internal RP1 UART as `/dev/ttyAMA0` with hardware loopback — fixed by using `/dev/ttyRobot` (setup.sh handles this).
+
+
+
+### Warnings:
+- On every code change: 
+```
+sudo systemctl restart v2x_car.service
+sudo systemctl stop v2x_car.service
+```
+
+- Only if manual control is needed, but try not to use this
+```
+sudo systemctl stop v2x_car.service
+python3 main_car.py   # your manual run
+sudo systemctl start v2x_car.service   # when done
+```

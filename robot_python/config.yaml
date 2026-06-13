@@ -180,9 +180,14 @@ emergency_handler:
   evasion_angular_speed: -0.20  # negative = RIGHT turn = toward inner island (clockwise driving)
                                  # was +0.9 which caused hard LEFT spin into outer wall
   evasion_duration_s: 6.0       # backup timer if camera doesn't see inner yellow (was 2.0)
+  min_evasion_s: 0.5            # boundary_near ignored until this many seconds elapsed in EVADING
+                                 # prevents immediate HOLDING when yellow already visible on entry
   hold_timeout_s: 30.0
   clear_delay_s: 1.0
   resume_ramp_duration_s: 2.0
+  recovery_linear_speed: 0.08   # forward speed during RECOVERING outward drive
+  recovery_angular_speed: 0.30  # positive = LEFT turn = toward outer lane (clockwise oval)
+  recovery_duration_s: 2.5      # max time in RECOVERING before fallback to RESUMING
   n_tags: 10
   yield_zone_gap: 3
   position_timeout_s: 3.0
