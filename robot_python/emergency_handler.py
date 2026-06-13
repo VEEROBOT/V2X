@@ -216,11 +216,24 @@ class EmergencyHandler:
             elif elapsed >= self._ev_dur:
                 logger.info("EVADING → HOLDING: evasion timer expired")
                 self._enter(_HOLDING, now)
-            ev_wz = self._yellow_steer(yellow_cx, frame_w,
-                                       max_toward=self._ev_angular,
-                                       max_ease=-self._dir * self._ev_side * 0.05,
-                                       bias=-self._dir * self._ev_side * 0.15,
-                                       rescue_wz=self._dir * self._ev_side * 0.20)
+            if self._ev_side > 0:
+                # Inner evasion: range is entirely toward inner island.
+                # max_ease = -0.05 (tiny left = minimum rightward approach speed).
+                ev_wz = self._yellow_steer(yellow_cx, frame_w,
+                                           max_toward=self._ev_angular,
+                                           max_ease=-self._dir * self._ev_side * 0.05,
+                                           bias=-self._dir * self._ev_side * 0.15,
+                                           rescue_wz=self._dir * self._ev_side * 0.20)
+            else:
+                # Outer evasion: allow RIGHT turn when yellow reaches target.
+                # Without this, max_ease=+0.05 (left) keeps robot pushing into boundary
+                # even when yellow is at rel=0.30.  With right-capable max_ease and
+                # slight right bias, robot decelerates approach BEFORE crossing the tape.
+                ev_wz = self._yellow_steer(yellow_cx, frame_w,
+                                           max_toward=self._ev_angular,
+                                           max_ease=self._dir * self._ev_side * 0.08,
+                                           bias=self._dir * self._ev_side * 0.05,
+                                           rescue_wz=self._dir * self._ev_side * 0.20)
             return self._ev_linear, ev_wz
 
         # ── HOLDING ──────────────────────────────────────────────────────────
