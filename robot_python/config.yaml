@@ -176,18 +176,31 @@ v2x_bridge:
 
 # ── Emergency Handler (car only) ─────────────────────────────────────────────
 emergency_handler:
-  evasion_linear_speed: 0.08    # slow forward veer (was 0.20 — too fast)
-  evasion_angular_speed: -0.20  # negative = RIGHT turn = toward inner island (clockwise driving)
-                                 # was +0.9 which caused hard LEFT spin into outer wall
-  evasion_duration_s: 6.0       # backup timer if camera doesn't see inner yellow (was 2.0)
-  min_evasion_s: 0.5            # boundary_near ignored until this many seconds elapsed in EVADING
-                                 # prevents immediate HOLDING when yellow already visible on entry
+  # ── EVADING: robot veers RIGHT to inner island ───────────────────────────
+  evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
+  evasion_angular_speed: -0.60  # hard RIGHT fallback when no yellow visible
+                                 # negative = RIGHT = toward inner island (clockwise driving)
+  evasion_duration_s: 6.0       # backup timer if boundary_near never fires
+  min_evasion_s: 0.5            # ignore boundary_near for first 0.5s — prevents instant skip
+                                 # if yellow already visible when evasion starts
+  # Yellow-tracking proportional control (active once yellow centroid is visible):
+  #   err = yellow_cx / frame_w - evasion_yellow_target
+  #   wz  = evasion_yellow_kp * err - 0.15   (clamped to [evasion_angular_speed, -0.05])
+  evasion_yellow_target: 0.70   # want yellow at 70% across frame (right side = inner island)
+  evasion_yellow_kp: 2.5        # gain per frame-width fraction (2.5 × 0.20 err = 0.50 wz)
+
+  # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
+  hold_linear_speed: 0.04       # creep forward so robot moves with traffic (not a stationary obstacle)
+                                 # yellow tracking keeps robot pinned to inner island during hold
   hold_timeout_s: 30.0
   clear_delay_s: 1.0
+
+  # ── RECOVERING: drive LEFT back to white line ─────────────────────────────
+  recovery_linear_speed: 0.08   # forward speed during outward arc
+  recovery_angular_speed: 0.45  # positive = LEFT = back toward white line (was 0.30, too weak)
+  recovery_duration_s: 2.5      # fallback timeout if white not found
   resume_ramp_duration_s: 2.0
-  recovery_linear_speed: 0.08   # forward speed during RECOVERING outward drive
-  recovery_angular_speed: 0.30  # positive = LEFT turn = toward outer lane (clockwise oval)
-  recovery_duration_s: 2.5      # max time in RECOVERING before fallback to RESUMING
+
   n_tags: 10
   yield_zone_gap: 3
   position_timeout_s: 3.0

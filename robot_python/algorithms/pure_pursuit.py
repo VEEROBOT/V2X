@@ -80,6 +80,7 @@ class PurePursuitFollower(BaseFollower):
             'ly_px':     ly_px,
             'n_strips':  self._last_n_strips,
             'last_wz':   round(self._last_wz, 3),
+            'yellow_cx': self._last_ycx,
         }
 
     def process(self, frame) -> Tuple[float, float]:

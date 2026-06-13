@@ -330,19 +330,22 @@ def main():
     # ── Emergency handler ─────────────────────────────────────────────────
     ec = cfg['emergency_handler']
     handler = EmergencyHandler(
-        evasion_linear_speed   = ec['evasion_linear_speed'],
-        evasion_angular_speed  = ec['evasion_angular_speed'],
-        evasion_duration_s     = ec['evasion_duration_s'],
-        min_evasion_s          = ec.get('min_evasion_s', 0.5),
+        evasion_linear_speed   = ec.get('evasion_linear_speed',   0.06),
+        evasion_angular_speed  = ec.get('evasion_angular_speed',  -0.60),
+        evasion_duration_s     = ec.get('evasion_duration_s',     6.0),
+        min_evasion_s          = ec.get('min_evasion_s',          0.5),
+        evasion_yellow_target  = ec.get('evasion_yellow_target',  0.70),
+        evasion_yellow_kp      = ec.get('evasion_yellow_kp',      2.5),
+        hold_linear_speed      = ec.get('hold_linear_speed',      0.04),
         recovery_linear_speed  = ec.get('recovery_linear_speed',  0.08),
-        recovery_angular_speed = ec.get('recovery_angular_speed', 0.30),
+        recovery_angular_speed = ec.get('recovery_angular_speed', 0.45),
         recovery_duration_s    = ec.get('recovery_duration_s',    2.5),
-        hold_timeout_s         = ec['hold_timeout_s'],
-        clear_delay_s          = ec['clear_delay_s'],
-        resume_ramp_duration_s = ec['resume_ramp_duration_s'],
-        n_tags                 = ec['n_tags'],
-        yield_zone_gap         = ec['yield_zone_gap'],
-        position_timeout_s     = ec['position_timeout_s'],
+        hold_timeout_s         = ec.get('hold_timeout_s',         30.0),
+        clear_delay_s          = ec.get('clear_delay_s',          1.0),
+        resume_ramp_duration_s = ec.get('resume_ramp_duration_s', 2.0),
+        n_tags                 = ec.get('n_tags',                 10),
+        yield_zone_gap         = ec.get('yield_zone_gap',         3),
+        position_timeout_s     = ec.get('position_timeout_s',     3.0),
     )
 
     # ── Vision stream (desktop browser) ──────────────────────────────────
@@ -460,10 +463,12 @@ def main():
             elif frame is not None:
                 # Autonomous — lane following through emergency handler
                 vx, wz = follower.process(frame)
+                dbg = follower.get_debug_info()
                 vx, wz = handler.process(
                     vx, wz,
                     boundary_near = follower.is_boundary_near(),
-                    white_found   = (follower.get_debug_info().get('mode') == 'WHITE'),
+                    white_found   = (dbg.get('mode') == 'WHITE'),
+                    yellow_cx     = dbg.get('yellow_cx'),
                 )
             else:
                 # No camera, no joystick — hold stop

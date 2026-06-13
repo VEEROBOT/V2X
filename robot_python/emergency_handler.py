@@ -44,12 +44,15 @@ _RESUMING   = 'RESUMING'
 class EmergencyHandler:
 
     def __init__(self,
-                 evasion_linear_speed:    float = 0.08,
-                 evasion_angular_speed:   float = -0.20,
+                 evasion_linear_speed:    float = 0.06,
+                 evasion_angular_speed:   float = -0.60,
                  evasion_duration_s:      float = 6.0,
                  min_evasion_s:           float = 0.5,
+                 evasion_yellow_target:   float = 0.70,
+                 evasion_yellow_kp:       float = 2.5,
+                 hold_linear_speed:       float = 0.04,
                  recovery_linear_speed:   float = 0.08,
-                 recovery_angular_speed:  float = 0.30,
+                 recovery_angular_speed:  float = 0.45,
                  recovery_duration_s:     float = 2.5,
                  hold_timeout_s:          float = 30.0,
                  clear_delay_s:           float = 1.0,
@@ -59,9 +62,12 @@ class EmergencyHandler:
                  position_timeout_s:      float = 3.0):
 
         self._ev_linear    = evasion_linear_speed
-        self._ev_angular   = evasion_angular_speed
+        self._ev_angular   = evasion_angular_speed   # hard-right fallback (no yellow visible)
         self._ev_dur       = evasion_duration_s
-        self._ev_min       = min_evasion_s       # boundary_near ignored until this elapsed
+        self._ev_min       = min_evasion_s           # boundary_near ignored until this elapsed
+        self._ev_yellow_tgt = evasion_yellow_target  # target yellow fraction of frame (0=left, 1=right)
+        self._ev_yellow_kp  = evasion_yellow_kp      # proportional gain per frame-width fraction
+        self._hold_vx      = hold_linear_speed
         self._rec_linear   = recovery_linear_speed
         self._rec_angular  = recovery_angular_speed
         self._rec_dur      = recovery_duration_s
@@ -120,15 +126,20 @@ class EmergencyHandler:
 
     # ── Main tick ────────────────────────────────────────────────────────────
     def process(self, vx: float, wz: float,
-                boundary_near: bool = False,
-                white_found:   bool = False) -> Tuple[float, float]:
+                boundary_near: bool          = False,
+                white_found:   bool          = False,
+                yellow_cx:     Optional[float] = None,
+                frame_w:       int           = 320) -> Tuple[float, float]:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
 
         boundary_near — True when camera sees yellow tape close ahead (inner island);
-                        triggers early HOLDING, but only after min_evasion_s.
+                        triggers HOLDING (but only after min_evasion_s in EVADING).
         white_found   — True when the lane follower has re-acquired the white line;
-                        used by RECOVERING to know when to hand back control.
+                        used by RECOVERING to exit early.
+        yellow_cx     — pixel X of yellow centroid in the camera frame (None if not seen);
+                        used for proportional steering during EVADING and HOLDING.
+        frame_w       — camera frame width in pixels (default 320).
         """
         self._last_vx = vx
         self._last_wz = wz
@@ -154,12 +165,21 @@ class EmergencyHandler:
             elif elapsed >= self._ev_dur:
                 logger.info("EVADING → HOLDING: evasion timer expired")
                 self._enter(_HOLDING, now)
-            return self._ev_linear, self._ev_angular
+            # Yellow-guided steering: proportional control to bring yellow to right edge.
+            # No yellow visible → hard right (ev_angular). Yellow visible → ease off as
+            # robot approaches inner island. Never turns LEFT during evasion (max_left=-0.05).
+            ev_wz = self._yellow_steer(yellow_cx, frame_w,
+                                       max_right=self._ev_angular, max_left=-0.05, bias=-0.15)
+            return self._ev_linear, ev_wz
 
         # ── HOLDING ──────────────────────────────────────────────────────────
         elif self._state == _HOLDING:
             self._check_holding(now, elapsed)
-            return 0.0, 0.0
+            # Slow creep while hugging inner yellow — keeps robot moving with traffic
+            # and maintains position against the island rather than sitting in the lane.
+            hold_wz = self._yellow_steer(yellow_cx, frame_w,
+                                         max_right=-0.25, max_left=0.05, bias=-0.10)
+            return self._hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
         elif self._state == _RECOVERING:
@@ -186,6 +206,25 @@ class EmergencyHandler:
         return vx, wz
 
     # ── State helpers ────────────────────────────────────────────────────────
+    def _yellow_steer(self, yellow_cx: Optional[float], frame_w: int,
+                      max_right: float, max_left: float, bias: float) -> float:
+        """
+        Proportional yellow-tracking controller.
+
+        Keeps yellow centroid at _ev_yellow_tgt fraction of the frame width.
+        Returns wz clamped to [max_right, max_left]:
+          max_right should be the hardest-right value (most negative, e.g. -0.60)
+          max_left  should be the softest-right / gentle-left limit (e.g. -0.05 or +0.05)
+          bias      is the equilibrium turn when yellow is exactly at target (e.g. -0.15)
+
+        No yellow visible → returns max_right (hard right to search for inner island).
+        """
+        if yellow_cx is None:
+            return max_right
+        err = yellow_cx / frame_w - self._ev_yellow_tgt  # positive = too close to island
+        wz  = self._ev_yellow_kp * err + bias
+        return max(max_right, min(max_left, wz))
+
     def _enter(self, state: str, now: float):
         self._state      = state
         self._state_time = now
