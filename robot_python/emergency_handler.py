@@ -9,10 +9,10 @@ car, the handler drives a five-state evasion sequence:
 
   NORMAL → EVADING → HOLDING → RECOVERING → RESUMING → NORMAL
 
-EVADING   : fixed veer toward inner island (right turn, negative wz)
-HOLDING   : stationary wait while ambulance passes
-RECOVERING: fixed outward drive (left turn, positive wz) to get back to
-            white line.  Exits early if white line re-acquired and/or a
+EVADING   : fixed veer toward the evasion boundary (inner island or outer edge,
+            controlled by evasion_side config).  Default: inner (right turn CW).
+HOLDING   : slow creep while hugging the evasion boundary
+RECOVERING: arc back to white line.  Exits early if white line re-acquired and/or a
             tag is detected (robot has a position fix near the oval).
             Falls back to timeout if line is never found.
 RESUMING  : ramp follower output back up from zero over ramp_duration_s
@@ -45,6 +45,7 @@ class EmergencyHandler:
 
     def __init__(self,
                  driving_direction:       str   = 'clockwise',
+                 evasion_side:            str   = 'inner',
                  evasion_linear_speed:    float = 0.06,
                  evasion_angular_speed:   float = 0.35,
                  evasion_duration_s:      float = 6.0,
@@ -64,26 +65,28 @@ class EmergencyHandler:
 
         # Direction sign: +1 = clockwise (inner island to RIGHT of robot)
         #                 -1 = counterclockwise (inner island to LEFT of robot)
-        # All angular speeds are stored as magnitudes in config; _dir applies the sign.
-        # "toward inner island" = -_dir   "toward outer lane (white)" = +_dir
         d = +1 if driving_direction.lower().startswith('c') and 'counter' not in driving_direction.lower() else -1
         self._dir = d
+
+        # Evasion side: +1 = inner (toward island), -1 = outer (toward boundary)
+        # Multiplying ev/rec angular by (d * side) gives the correct sign in all cases.
+        side = +1 if evasion_side.lower().startswith('i') else -1
+        self._ev_side = side
 
         ev_mag  = abs(evasion_angular_speed)
         rec_mag = abs(recovery_angular_speed)
 
         self._ev_linear    = evasion_linear_speed
-        self._ev_angular   = -d * ev_mag          # toward inner island (CW: neg, CCW: pos)
+        self._ev_angular   = -d * side * ev_mag   # inner/CW: neg (right); outer/CW: pos (left)
         self._ev_dur       = evasion_duration_s
         self._ev_min       = min_evasion_s
         self._ev_yellow_kp = evasion_yellow_kp
-        # Target fraction of frame where yellow should appear.
-        # User always specifies the clockwise value (0.70 = right side).
-        # For CCW the inner island is on the LEFT, so we mirror around 0.5.
-        self._ev_yellow_tgt = 0.50 + d * abs(evasion_yellow_target - 0.50)
+        # Target fraction: user specifies inner-CW value (0.70 = right side of frame).
+        # inner/CW: 0.50 + 1*0.20 = 0.70   outer/CW: 0.50 - 1*0.20 = 0.30
+        self._ev_yellow_tgt = 0.50 + d * side * abs(evasion_yellow_target - 0.50)
         self._hold_vx      = hold_linear_speed
         self._rec_linear   = recovery_linear_speed
-        self._rec_angular  = d * rec_mag           # toward outer lane (CW: pos, CCW: neg)
+        self._rec_angular  = d * side * rec_mag   # inner/CW: pos (left back); outer/CW: neg (right back)
         self._rec_dur      = recovery_duration_s
         self._hold_max     = hold_timeout_s
         self._clear_delay  = clear_delay_s
@@ -187,9 +190,9 @@ class EmergencyHandler:
             # robot approaches inner island. Never turns LEFT during evasion (max_left=-0.05).
             ev_wz = self._yellow_steer(yellow_cx, frame_w,
                                        max_toward=self._ev_angular,
-                                       max_ease=-self._dir * 0.05,
-                                       bias=-self._dir * 0.15,
-                                       rescue_wz=self._dir * 0.20)
+                                       max_ease=-self._dir * self._ev_side * 0.05,
+                                       bias=-self._dir * self._ev_side * 0.15,
+                                       rescue_wz=self._dir * self._ev_side * 0.20)
             return self._ev_linear, ev_wz
 
         # ── HOLDING ──────────────────────────────────────────────────────────
@@ -198,10 +201,10 @@ class EmergencyHandler:
             # Slow creep while hugging inner yellow — keeps robot moving with traffic
             # and maintains position against the island rather than sitting in the lane.
             hold_wz = self._yellow_steer(yellow_cx, frame_w,
-                                         max_toward=-self._dir * 0.25,
-                                         max_ease=self._dir * 0.05,
-                                         bias=-self._dir * 0.10,
-                                         rescue_wz=self._dir * 0.10)
+                                         max_toward=-self._dir * self._ev_side * 0.25,
+                                         max_ease=self._dir * self._ev_side * 0.05,
+                                         bias=-self._dir * self._ev_side * 0.10,
+                                         rescue_wz=self._dir * self._ev_side * 0.10)
             return self._hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
@@ -255,7 +258,7 @@ class EmergencyHandler:
         if yellow_cx is None:
             return max_toward   # no yellow visible: turn hard toward inner island
         rel = yellow_cx / frame_w
-        if (rel - 0.50) * self._dir < -0.05:
+        if (rel - 0.50) * self._dir * self._ev_side < -0.05:
             # Yellow is on the wrong side — robot overshot the inner island line.
             return rescue_wz
         err = rel - self._ev_yellow_tgt   # positive = yellow further toward inner island

@@ -189,7 +189,11 @@ emergency_handler:
                                  # all angular speeds below are MAGNITUDES — the handler
                                  # applies the correct sign automatically.
 
-  # ── EVADING: robot veers toward inner island ─────────────────────────────
+  evasion_side: inner           # inner = veer toward inner island (default, original behaviour)
+                                 # outer = veer toward outer boundary
+                                 # flip this one word to switch; no other changes needed.
+
+  # ── EVADING: robot veers toward evasion boundary ────────────────────────
   evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
   evasion_angular_speed: 0.35   # magnitude of fallback turn when no yellow visible
                                  # 0.60 was too aggressive (inner wheel reversed, robot pivoted

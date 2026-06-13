@@ -338,6 +338,7 @@ def main():
     ec = cfg['emergency_handler']
     handler = EmergencyHandler(
         driving_direction      = ec.get('driving_direction',       'clockwise'),
+        evasion_side           = ec.get('evasion_side',            'inner'),
         evasion_linear_speed   = ec.get('evasion_linear_speed',   0.06),
         evasion_angular_speed  = ec.get('evasion_angular_speed',  0.35),
         evasion_duration_s     = ec.get('evasion_duration_s',     6.0),
