@@ -28,6 +28,7 @@ Key tuning parameters
 """
 
 import logging
+import math
 import time
 from typing import List, Optional, Tuple
 
@@ -58,6 +59,9 @@ class PurePursuitFollower(BaseFollower):
         self._last_good_wz:   float = 0.0
         self._last_good_lx:   float = 0.0
         self._last_good_conf: float = 0.0
+        self._lx_alpha       = 0.55      # EMA factor for lookahead error smoothing
+        self._smoothed_lx    = 0.0
+        self._wz_slew        = 0.12      # max |Δwz| per frame @ 20 Hz
 
     # ── Public API ───────────────────────────────────────────────────────────
     def get_mode(self) -> str:
@@ -122,6 +126,11 @@ class PurePursuitFollower(BaseFollower):
             lx, ly = self._get_lookahead(points, target, lookahead_px)
             n_strips = len(points)
 
+            # Smooth lookahead error: strip centroids are noisy and can make the
+            # controller chase jitter.
+            self._smoothed_lx = self._lx_alpha * lx + (1.0 - self._lx_alpha) * self._smoothed_lx
+            lx = self._smoothed_lx
+
             edge_conf = abs(lx) > roi_w * 0.40
             edge_track = edge_conf and n_strips >= 6 and ly >= self._ly_min
             low_conf = n_strips <= 4 or ly < self._ly_min
@@ -158,6 +167,12 @@ class PurePursuitFollower(BaseFollower):
                 if abs(wz) < min_edge_wz:
                     wz = float(np.sign(wz) * min_edge_wz)
 
+            # Slew rate limit — 4-wheel robots have high inertia and skid if
+            # steering changes too abruptly.
+            delta_wz = wz - self._last_wz
+            if abs(delta_wz) > self._wz_slew:
+                wz = self._last_wz + math.copysign(self._wz_slew, delta_wz)
+
             self._last_wz = wz
 
             if n_strips >= 6 and ly >= self._ly_min:
@@ -190,8 +205,10 @@ class PurePursuitFollower(BaseFollower):
         self._mode = 'LOST'
         self._last_lookahead = None
         if now - self._lost_start >= self._lost_stop_s:
+            self._last_wz = 0.0
             return 0.0, 0.0
         safe_wz = float(np.clip(self._last_good_wz, -0.55, 0.55))
+        self._last_wz = safe_wz
         return self._linear_speed * self._lost_lin_frac, safe_wz
 
     # ── Debug panel ──────────────────────────────────────────────────────────
