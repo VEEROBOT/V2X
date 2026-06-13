@@ -71,9 +71,12 @@ class RunLogger:
     File: ~/v2x_run.csv — overwritten at the start of each arm session.
     Cleared on every arm press so old data never accumulates.
     Delete manually with:  rm ~/v2x_run.csv
+
+    Disable entirely with  logging.run_log: false  in config.yaml.
     """
 
-    def __init__(self):
+    def __init__(self, enabled: bool = True):
+        self._enabled = enabled
         self._file    = None
         self._writer  = None
         self._t_start = 0.0
@@ -81,6 +84,8 @@ class RunLogger:
         self._armed   = False
 
     def arm(self):
+        if not self._enabled:
+            return
         self._close()
         self._file   = open(_LOG_PATH, 'w', newline='', buffering=1)
         self._writer = csv.writer(self._file)
@@ -92,6 +97,8 @@ class RunLogger:
 
     def disarm(self):
         self._armed = False
+        if not self._enabled:
+            return
         self._close()
         logger.info("Run log closed → %s", _LOG_PATH)
 
@@ -389,7 +396,7 @@ def main():
     _stream_wz       = 0.0
     _last_stream_t   = 0.0
     _crop_y          = int(lc['crop_top_ratio'] * cc['height'])
-    _run_log         = RunLogger()
+    _run_log         = RunLogger(enabled=cfg.get('logging', {}).get('run_log', True))
     own_pos          = None    # last known position (survives frames where camera unavailable)
 
     try:

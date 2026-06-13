@@ -148,6 +148,11 @@ position:
   debug_image: false
 
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  run_log: true                  # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
+
+
 # ── Vision Stream (browser) ───────────────────────────────────────────────────
 # Open http://<robot-ip>:5005/ in any browser on the same network.
 stream:
