@@ -55,6 +55,9 @@ class PurePursuitFollower(BaseFollower):
         self._last_points:    List[Tuple[float, float]] = []   # (row_from_bottom, cx)
         self._last_lookahead: Optional[Tuple[float, float]] = None  # (Lx, Ly)
         self._last_n_strips:  int = 0
+        self._last_good_wz:   float = 0.0
+        self._last_good_lx:   float = 0.0
+        self._last_good_conf: float = 0.0
 
     # ── Public API ───────────────────────────────────────────────────────────
     def get_mode(self) -> str:
@@ -116,6 +119,20 @@ class PurePursuitFollower(BaseFollower):
         if white_found:
             lookahead_px = roi_h * self._lookahead_frac
             lx, ly = self._get_lookahead(points, target, lookahead_px)
+            n_strips = len(points)
+
+            edge_conf = abs(lx) > roi_w * 0.40
+            edge_track = edge_conf and n_strips >= 6 and ly >= self._ly_min
+            low_conf = n_strips <= 4 or ly < self._ly_min
+            sign_flip = (
+                self._last_good_conf > 0.0
+                and np.sign(lx) != np.sign(self._last_good_lx)
+                and abs(lx) > 20.0
+                and abs(self._last_good_lx) > 20.0
+            )
+            if low_conf and sign_flip:
+                lx = self._last_good_lx
+
             self._last_lookahead = (lx, ly)
 
             self._lost_start = None
@@ -128,7 +145,24 @@ class PurePursuitFollower(BaseFollower):
             curvature = (2.0 * lx / l_sq) if l_sq > 1.0 else 0.0
             wz = float(np.clip(-self._kpp * curvature,
                                 -self._max_angular, self._max_angular))
+
+            if n_strips <= 3:
+                wz = float(np.clip(wz, -0.35, 0.35))
+            elif n_strips <= 5:
+                wz = float(np.clip(wz, -0.55, 0.55))
+            elif edge_track:
+                # Edge-visible line on a curve is often legitimate; boost turn authority
+                # instead of under-steering away from the dashed guide.
+                min_edge_wz = min(self._max_angular, 0.65)
+                if abs(wz) < min_edge_wz:
+                    wz = float(np.sign(wz) * min_edge_wz)
+
             self._last_wz = wz
+
+            if n_strips >= 6 and ly >= self._ly_min:
+                self._last_good_wz = wz
+                self._last_good_lx = lx
+                self._last_good_conf = 1.0
 
             # Speed: gentle reduction so inner wheel stays above IK-clamp threshold.
             # 0.70 was too aggressive — at max error vx dropped to 0.03 m/s, clamping
@@ -156,7 +190,8 @@ class PurePursuitFollower(BaseFollower):
         self._last_lookahead = None
         if now - self._lost_start >= self._lost_stop_s:
             return 0.0, 0.0
-        return self._linear_speed * self._lost_lin_frac, self._last_wz
+        safe_wz = float(np.clip(self._last_good_wz, -0.55, 0.55))
+        return self._linear_speed * self._lost_lin_frac, safe_wz
 
     # ── Debug panel ──────────────────────────────────────────────────────────
     def get_roi_panels(self) -> Optional[np.ndarray]:

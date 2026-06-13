@@ -53,21 +53,21 @@ lane_follower:
   # --- Speed ---
   linear_speed: 0.10             # m/s — how fast the robot drives on the line
   max_angular_speed: 0.9         # rad/s — max turn rate (keep below 1.06 to avoid wheel reversal)
-  lost_linear_frac: 0.50         # 50% speed while lost — slow enough to limit drift, fast enough to cross dash gaps
+  lost_linear_frac: 0.45         # 45% speed while lost — slow enough to limit drift, fast enough to cross dash gaps
   lost_stop_s: 4.0               # seconds of pure LOST (no yellow either) before full stop
   no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
 
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
   # kpp=25 was too weak: max wz only 0.37 rad/s, robot achieved only 13% actual on curves.
   # kpp=50 caused instability when Ly was tiny (small n_strips). ly_min_px prevents that.
-  kpp: 40.0                      # steering gain — raise if turns too gentle, lower if oscillating
+  kpp: 32.0                      # steering gain — raise if turns too gentle, lower if oscillating
   lookahead_frac: 0.35           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
   ly_min_px: 30                  # minimum Ly in formula — prevents blow-up when only near strips detected
 
   # --- Recorded Path — Learning from Demonstration ---
   #
   # HOW TO RECORD A TRAINING LAP:
-  #   1. Set  algorithm: recorded_path  below (this section)
+  #   1. Set  algorithm: recorded_path above (this section)
   #   2. Press Start (joystick) to arm the robot
   #   3. Hold LB (deadman) — take manual control
   #   4. Press X → logs "Training STARTED" — recording begins
@@ -88,7 +88,7 @@ lane_follower:
   # FILE: ~/v2x_training.json  (persists across reboots; delete to reset)
   # FORMAT: per-zone mean curvature and speed recorded during the training lap
   #
-  use_training_data: true        # false = ignore training file, behave like pure_pursuit
+  use_training_data: false        # false = ignore training file, behave like pure_pursuit
   training_data_file: ~/v2x_training.json
   ff_blend: 0.70                 # 0.0=pure camera  1.0=pure training  0.7=recommended start
 
