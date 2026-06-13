@@ -61,6 +61,8 @@ _LOG_COLS = [
     'wz_enc',        # actual angular rate from encoder RPMs (rad/s)
     'gyro_z',        # IMU yaw rate (rad/s) — independent of commanded wz
     'tags_seen',
+    'eh_state',      # emergency handler FSM state (NORMAL/EVADING/HOLDING/RECOVERING/RESUMING)
+    'emergency',     # 1 when V2X or sim emergency flag is active
 ]
 
 
@@ -103,7 +105,7 @@ class RunLogger:
         logger.info("Run log closed → %s", _LOG_PATH)
 
     def log(self, vx: float, wz: float, zone: int,
-            follower, estimator, driver=None):
+            follower, estimator, driver=None, handler=None, emergency: bool = False):
         if not self._armed or self._writer is None:
             return
         now = time.monotonic()
@@ -140,6 +142,8 @@ class RunLogger:
             wz_enc,
             gyro_z,
             tags_str,
+            handler.get_state() if handler is not None else '',
+            1 if emergency else 0,
         ])
 
     def _close(self):
@@ -503,7 +507,9 @@ def main():
             _stream_vx, _stream_wz = vx, wz
 
             # ── Run log (10 Hz, only while armed) ────────────────────────
-            _run_log.log(vx, wz, zone, follower, estimator, driver)
+            _run_log.log(vx, wz, zone, follower, estimator, driver,
+                         handler=handler,
+                         emergency=bridge.is_emergency() or _sim_emergency)
 
             if frame is None:
                 time.sleep(0.02)  # ~50 Hz when no camera

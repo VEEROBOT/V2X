@@ -226,15 +226,24 @@ class EmergencyHandler:
         # ── HOLDING ──────────────────────────────────────────────────────────
         elif self._state == _HOLDING:
             self._check_holding(now, elapsed)
-            # Yellow tracking holds robot against evasion boundary.
-            # ev_side flips all signs: inner uses inner island yellow, outer uses outer tape.
-            # For outer CW: max_ease = d*side*0.05 = -0.05 → allows tiny right turn
-            # when robot is too close to boundary, preventing overshoot in HOLDING.
-            hold_wz = self._yellow_steer(yellow_cx, frame_w,
-                                         max_toward=-self._dir * self._ev_side * 0.25,
-                                         max_ease=self._dir * self._ev_side * 0.05,
-                                         bias=-self._dir * self._ev_side * 0.10,
-                                         rescue_wz=self._dir * self._ev_side * 0.10)
+            if self._ev_side > 0:
+                # Inner evasion: inner island is a physical barrier — hard approach is safe.
+                hold_wz = self._yellow_steer(yellow_cx, frame_w,
+                                             max_toward=-self._dir * self._ev_side * 0.25,
+                                             max_ease=self._dir * self._ev_side * 0.05,
+                                             bias=-self._dir * self._ev_side * 0.10,
+                                             rescue_wz=self._dir * self._ev_side * 0.10)
+            else:
+                # Outer evasion: thin tape, curved track — hard approach causes oscillation
+                # and crossing. Use half the max turn, no bias, wz=0 when no yellow.
+                if yellow_cx is None:
+                    hold_wz = 0.0   # no feedback → drive straight, don't approach blind
+                else:
+                    hold_wz = self._yellow_steer(yellow_cx, frame_w,
+                                                 max_toward=-self._dir * self._ev_side * 0.12,
+                                                 max_ease=self._dir * self._ev_side * 0.05,
+                                                 bias=0.0,
+                                                 rescue_wz=self._dir * self._ev_side * 0.05)
             return self._hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
