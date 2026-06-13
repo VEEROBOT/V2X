@@ -409,9 +409,13 @@ def main():
             # V2X alert can never be suppressed by the joystick.
             if joystick.get_amb_arrive():
                 _sim_emergency = True
+                handler.set_force_yield(True)   # bypass position check for solo testing
                 logger.info("*** SIM: ambulance ARRIVE (A button) ***")
             if joystick.get_amb_depart():
                 _sim_emergency = False
+                handler.set_force_yield(False)  # restore position logic
+                # Note: if real V2X is still active, bridge.is_emergency() stays True
+                # and position-based logic takes over — B cannot suppress a real ambulance.
                 logger.info("*** SIM: ambulance DEPART (B button) ***")
             if joystick.get_train_toggle() and hasattr(follower, 'toggle_training'):
                 follower.toggle_training()

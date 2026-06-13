@@ -102,6 +102,7 @@ class EmergencyHandler:
         # Emergency flag
         self._emergency    = False
         self._was_active   = False
+        self._force_yield  = False   # bypass position check (solo-car test via A button)
 
         # Last line-follower command (for pass-through and ramp)
         self._last_vx      = 0.0
@@ -127,6 +128,20 @@ class EmergencyHandler:
         if pos:
             self._amb_zone = int(pos.get('zone', -1))
             self._amb_time = time.monotonic()
+
+    def set_force_yield(self, val: bool):
+        """
+        True  → skip position check; yield immediately when emergency is active.
+               Use for solo-car testing (A button, no ambulance broadcasting).
+        False → normal position-based logic resumes.
+               Safe to call when real V2X is active — bridge keeps emergency True
+               so the ambulance signal is never dropped.
+        """
+        self._force_yield = val
+        if val:
+            logger.info("Force-yield ON — position check bypassed")
+        else:
+            logger.info("Force-yield OFF — position check active")
 
     def update_emergency(self, active: bool):
         if active and not self._was_active:
@@ -314,6 +329,8 @@ class EmergencyHandler:
     def _should_yield(self) -> bool:
         if not self._emergency:
             return False
+        if self._force_yield and not self._position_known():
+            return True   # solo test: A button pressed, no ambulance broadcasting
         if not self._position_known():
             logger.info("Emergency active — waiting for position fix before yielding")
             return False
