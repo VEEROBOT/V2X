@@ -189,7 +189,7 @@ emergency_handler:
                                  # all angular speeds below are MAGNITUDES — the handler
                                  # applies the correct sign automatically.
 
-  evasion_side: inner           # inner = veer toward inner island (default, original behaviour)
+  evasion_side: outer           # inner = veer toward inner island (default, original behaviour)
                                  # outer = veer toward outer boundary
                                  # flip this one word to switch; no other changes needed.
 
@@ -215,7 +215,7 @@ emergency_handler:
   # ── RECOVERING: drive back to white line ────────────────────────────────
   recovery_linear_speed: 0.08   # forward speed during outward arc
   recovery_angular_speed: 0.45  # magnitude — toward outer lane (away from inner island)
-  recovery_duration_s: 2.5      # fallback timeout if white not found
+  recovery_duration_s: 3.5      # fallback timeout if white not found (2.5 was too short)
   resume_ramp_duration_s: 2.0
 
   n_tags: 10

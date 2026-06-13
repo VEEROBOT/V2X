@@ -173,8 +173,9 @@ class EmergencyHandler:
         yellow_cx     — pixel X of yellow centroid in the camera frame (None if not seen);
                         used for proportional steering during EVADING and HOLDING.
         frame_w       — camera frame width in pixels (default 320).
-        outer_tag     — True when an outer boundary AprilTag (IDs 10-17) was detected;
-                        robot has drifted past the white line during RECOVERING — stop arc.
+        outer_tag     — True when an outer boundary AprilTag (IDs 10-17) was detected.
+                        Inner evasion RECOVERING: robot overshot the white line — stop arc.
+                        Outer evasion EVADING: robot has reached the outer boundary — start HOLDING.
         """
         self._last_vx = vx
         self._last_wz = wz
@@ -192,17 +193,29 @@ class EmergencyHandler:
 
         # ── EVADING ─────────────────────────────────────────────────────────
         elif self._state == _EVADING:
-            # Respect min_evasion_s so boundary_near can't skip before we move
             past_min = elapsed >= self._ev_min
-            if past_min and boundary_near:
-                logger.info("EVADING → HOLDING: inner boundary detected (%.1fs elapsed)", elapsed)
+            # Primary trigger: yellow fills bottom half of ROI (wide inner island).
+            # Secondary triggers for outer evasion (outer tape is thin — bottom-half
+            # detection fires too late):
+            #   yellow_at_tgt: yellow centroid has reached target x-position, meaning
+            #                  the robot is AT the boundary before crossing it.
+            #   outer_tag:     outer boundary AprilTag visible — belt-and-suspenders.
+            yellow_at_tgt = (
+                yellow_cx is not None and
+                (yellow_cx / frame_w - self._ev_yellow_tgt) * self._dir * self._ev_side >= -0.05
+            )
+            if self._ev_side > 0:
+                boundary_hit = past_min and boundary_near
+            else:
+                boundary_hit = past_min and (boundary_near or outer_tag or yellow_at_tgt)
+            if boundary_hit:
+                logger.info("EVADING → HOLDING: boundary reached "
+                            "(boundary_near=%s outer_tag=%s yellow_at_tgt=%s, %.1fs)",
+                            boundary_near, outer_tag, yellow_at_tgt, elapsed)
                 self._enter(_HOLDING, now)
             elif elapsed >= self._ev_dur:
                 logger.info("EVADING → HOLDING: evasion timer expired")
                 self._enter(_HOLDING, now)
-            # Yellow-guided steering: proportional control to bring yellow to right edge.
-            # No yellow visible → hard right (ev_angular). Yellow visible → ease off as
-            # robot approaches inner island. Never turns LEFT during evasion (max_left=-0.05).
             ev_wz = self._yellow_steer(yellow_cx, frame_w,
                                        max_toward=self._ev_angular,
                                        max_ease=-self._dir * self._ev_side * 0.05,
@@ -213,8 +226,10 @@ class EmergencyHandler:
         # ── HOLDING ──────────────────────────────────────────────────────────
         elif self._state == _HOLDING:
             self._check_holding(now, elapsed)
-            # Slow creep while hugging inner yellow — keeps robot moving with traffic
-            # and maintains position against the island rather than sitting in the lane.
+            # Yellow tracking holds robot against evasion boundary.
+            # ev_side flips all signs: inner uses inner island yellow, outer uses outer tape.
+            # For outer CW: max_ease = d*side*0.05 = -0.05 → allows tiny right turn
+            # when robot is too close to boundary, preventing overshoot in HOLDING.
             hold_wz = self._yellow_steer(yellow_cx, frame_w,
                                          max_toward=-self._dir * self._ev_side * 0.25,
                                          max_ease=self._dir * self._ev_side * 0.05,
@@ -227,9 +242,11 @@ class EmergencyHandler:
             # Tag seen during recovery = robot has a position fix near the oval
             tag_seen = (self._own_zone_t > self._state_time + 0.3)
 
-            if outer_tag:
-                # Outer boundary tag visible — robot has overshot the white line
-                # and is approaching the outer yellow.  Stop the outward arc now.
+            if outer_tag and self._ev_side > 0:
+                # Inner evasion only: outer tag means robot overshot the white line
+                # during outward arc.  Stop now.
+                # (Outer evasion RECOVERING starts at the outer boundary — outer_tag
+                # fires immediately and must be ignored here.)
                 logger.warning("RECOVERING → RESUMING: outer tag seen — overshot white line")
                 self._enter(_RESUMING, now)
             elif white_found:

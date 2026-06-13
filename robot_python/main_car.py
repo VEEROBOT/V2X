@@ -393,6 +393,7 @@ def main():
 
     _robot_armed     = False   # starts disarmed; press Start to arm
     _sim_emergency   = False   # set by joystick A; OR'd with real V2X — never overrides it
+    _prev_h_state    = 'NORMAL'
     _stream_vx       = 0.0
     _stream_wz       = 0.0
     _last_stream_t   = 0.0
@@ -487,6 +488,16 @@ def main():
             else:
                 # No camera, no joystick — hold stop
                 vx, wz = 0.0, 0.0
+
+            # When emergency handler enters RESUMING, reset follower LOST timers.
+            # The no_white_stop_s timer accumulates during long evasion sequences
+            # (EVADING up to 6s + HOLDING) and can expire before RESUMING starts,
+            # causing the follower to return (0,0) immediately on ramp-up.
+            new_h_state = handler.get_state()
+            if _prev_h_state != 'RESUMING' and new_h_state == 'RESUMING':
+                follower.reset_pid()
+                logger.info("Entering RESUMING — follower LOST timers reset")
+            _prev_h_state = new_h_state
 
             driver.set_velocity(vx, wz)
             _stream_vx, _stream_wz = vx, wz
