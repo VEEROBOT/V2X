@@ -178,7 +178,8 @@ class EmergencyHandler:
             # Slow creep while hugging inner yellow — keeps robot moving with traffic
             # and maintains position against the island rather than sitting in the lane.
             hold_wz = self._yellow_steer(yellow_cx, frame_w,
-                                         max_right=-0.25, max_left=0.05, bias=-0.10)
+                                         max_right=-0.25, max_left=0.05, bias=-0.10,
+                                         rescue_wz=0.10)  # gentle left if somehow inside island
             return self._hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
@@ -207,21 +208,31 @@ class EmergencyHandler:
 
     # ── State helpers ────────────────────────────────────────────────────────
     def _yellow_steer(self, yellow_cx: Optional[float], frame_w: int,
-                      max_right: float, max_left: float, bias: float) -> float:
+                      max_right: float, max_left: float, bias: float,
+                      rescue_wz: float = 0.20) -> float:
         """
-        Proportional yellow-tracking controller.
+        Proportional yellow-tracking controller with overshoot rescue.
 
         Keeps yellow centroid at _ev_yellow_tgt fraction of the frame width.
-        Returns wz clamped to [max_right, max_left]:
-          max_right should be the hardest-right value (most negative, e.g. -0.60)
-          max_left  should be the softest-right / gentle-left limit (e.g. -0.05 or +0.05)
-          bias      is the equilibrium turn when yellow is exactly at target (e.g. -0.15)
+          max_right  — hardest right (most negative), used when no yellow visible
+          max_left   — softest limit (e.g. -0.05 to prevent left turns while evading)
+          bias       — equilibrium turn when yellow is exactly at target
+          rescue_wz  — POSITIVE left turn used when yellow appears on the LEFT half
+                       of the frame, meaning the robot overshot the inner island line
 
-        No yellow visible → returns max_right (hard right to search for inner island).
+        State diagram for yellow position:
+          None           → max_right (search for island, turn right hard)
+          rel < 0.45     → rescue_wz (inside island, yellow behind/left → come back out)
+          0.45–1.0       → proportional: clamped to [max_right, max_left]
         """
         if yellow_cx is None:
             return max_right
-        err = yellow_cx / frame_w - self._ev_yellow_tgt  # positive = too close to island
+        rel = yellow_cx / frame_w
+        if rel < 0.45:
+            # Yellow is on the LEFT side of the frame — robot has crossed the inner
+            # island line and is now inside.  Turn LEFT to come back out.
+            return rescue_wz
+        err = rel - self._ev_yellow_tgt   # positive = yellow further right = close to island
         wz  = self._ev_yellow_kp * err + bias
         return max(max_right, min(max_left, wz))
 

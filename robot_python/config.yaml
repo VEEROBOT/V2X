@@ -178,11 +178,13 @@ v2x_bridge:
 emergency_handler:
   # ── EVADING: robot veers RIGHT to inner island ───────────────────────────
   evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
-  evasion_angular_speed: -0.60  # hard RIGHT fallback when no yellow visible
+  evasion_angular_speed: -0.35  # fallback RIGHT turn when no yellow visible
+                                 # -0.60 was too aggressive: inner wheel reversed, robot pivoted
+                                 # instead of arcing → overshot inner yellow into the island
                                  # negative = RIGHT = toward inner island (clockwise driving)
   evasion_duration_s: 6.0       # backup timer if boundary_near never fires
-  min_evasion_s: 0.5            # ignore boundary_near for first 0.5s — prevents instant skip
-                                 # if yellow already visible when evasion starts
+  min_evasion_s: 0.2            # ignore boundary_near for first 0.2s only
+                                 # was 0.5 which allowed too much rotation before stopping
   # Yellow-tracking proportional control (active once yellow centroid is visible):
   #   err = yellow_cx / frame_w - evasion_yellow_target
   #   wz  = evasion_yellow_kp * err - 0.15   (clamped to [evasion_angular_speed, -0.05])
