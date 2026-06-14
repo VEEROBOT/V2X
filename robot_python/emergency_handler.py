@@ -29,6 +29,7 @@ License:
 """
 
 import logging
+import math
 import time
 from typing import Optional, Tuple, Dict
 
@@ -61,7 +62,11 @@ class EmergencyHandler:
                  resume_ramp_duration_s:  float = 2.0,
                  n_tags:                  int   = 10,
                  yield_zone_gap:          int   = 3,
-                 position_timeout_s:      float = 3.0):
+                 position_timeout_s:      float = 3.0,
+                 recovery_exit_mode:      str   = 'timer',
+                 recovery_target_deg:     float = 30.0,
+                 gyro_max_rad_s:          float = 4.0,
+                 gyro_min_samples:        int   = 3):
 
         # Direction sign: +1 = clockwise (inner island to RIGHT of robot)
         #                 -1 = counterclockwise (inner island to LEFT of robot)
@@ -119,6 +124,15 @@ class EmergencyHandler:
         self._clear_stamp  = None
         self._last_pos_log_t: float = 0.0   # rate-limit "waiting for position fix" log
 
+        # Gyro-exit mode (recovery_exit_mode: gyro)
+        self._rec_exit_mode        = recovery_exit_mode.lower()
+        self._rec_target_rad       = math.radians(recovery_target_deg)
+        self._gyro_max             = gyro_max_rad_s
+        self._gyro_min_samples     = gyro_min_samples
+        self._recovery_angle_rad   = 0.0   # accumulated rotation this RECOVERING arc
+        self._recovery_gyro_samples = 0    # valid gyro readings this RECOVERING arc
+        self._last_process_t       = 0.0   # for computing dt inside process()
+
     # ── Input setters ────────────────────────────────────────────────────────
     def update_own_position(self, pos: Optional[Dict]):
         if pos:
@@ -159,11 +173,12 @@ class EmergencyHandler:
 
     # ── Main tick ────────────────────────────────────────────────────────────
     def process(self, vx: float, wz: float,
-                boundary_near: bool          = False,
-                white_found:   bool          = False,
+                boundary_near: bool            = False,
+                white_found:   bool            = False,
                 yellow_cx:     Optional[float] = None,
-                frame_w:       int           = 320,
-                outer_tag:     bool          = False) -> Tuple[float, float]:
+                frame_w:       int             = 320,
+                outer_tag:     bool            = False,
+                gyro_z:        float           = 0.0) -> Tuple[float, float]:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
 
@@ -177,12 +192,21 @@ class EmergencyHandler:
         outer_tag     — True when an outer boundary AprilTag (IDs 10-17) was detected.
                         Inner evasion RECOVERING: robot overshot the white line — stop arc.
                         Outer evasion EVADING: robot has reached the outer boundary — start HOLDING.
+        gyro_z        — yaw-rate from STM32 IMU in rad/s (positive = left turn).
+                        Only used when recovery_exit_mode == 'gyro'. Safe to pass
+                        even in timer mode — value is ignored.
         """
         self._last_vx = vx
         self._last_wz = wz
 
         now     = time.monotonic()
         elapsed = now - self._state_time
+
+        # dt for gyro integration — computed before updating _last_process_t
+        _gyro_dt = now - self._last_process_t
+        self._last_process_t = now
+        if _gyro_dt > 0.2 or _gyro_dt <= 0:
+            _gyro_dt = 0.0   # reject first call and large gaps (stale / restart)
 
         # ── NORMAL ──────────────────────────────────────────────────────────
         if self._state == _NORMAL:
@@ -268,6 +292,15 @@ class EmergencyHandler:
 
         # ── RECOVERING ───────────────────────────────────────────────────────
         elif self._state == _RECOVERING:
+            # Accumulate rotation angle (gyro mode only)
+            # Spike filter: IMU is inside aluminium chassis near motors — EMI spikes
+            # can reach 10+ rad/s.  Reject anything above gyro_max_rad_s.
+            # Also ignore tiny values (< 0.02 rad/s) which are sensor noise at rest.
+            if self._rec_exit_mode == 'gyro' and _gyro_dt > 0:
+                if 0.02 < abs(gyro_z) <= self._gyro_max:
+                    self._recovery_angle_rad   += abs(gyro_z) * _gyro_dt
+                    self._recovery_gyro_samples += 1
+
             # Tag seen during recovery = robot has a position fix near the oval
             tag_seen = (self._own_zone_t > self._state_time + 0.3)
 
@@ -282,8 +315,15 @@ class EmergencyHandler:
                 logger.info("RECOVERING → RESUMING: white line re-acquired"
                             + (" (tag z=%d)" % self._own_zone if tag_seen else ""))
                 self._enter(_RESUMING, now)
+            elif (self._rec_exit_mode == 'gyro'
+                  and self._recovery_gyro_samples >= self._gyro_min_samples
+                  and self._recovery_angle_rad    >= self._rec_target_rad):
+                logger.info("RECOVERING → RESUMING: gyro %.1f° reached (%d samples)",
+                            math.degrees(self._recovery_angle_rad), self._recovery_gyro_samples)
+                self._enter(_RESUMING, now)
             elif elapsed >= self._rec_dur:
-                logger.info("RECOVERING → RESUMING: timeout (white not found)")
+                label = 'gyro fallback — timer fired' if self._rec_exit_mode == 'gyro' else 'timeout'
+                logger.info("RECOVERING → RESUMING: %s (white not found)", label)
                 self._enter(_RESUMING, now)
             return self._rec_linear, self._rec_angular
 
@@ -334,6 +374,9 @@ class EmergencyHandler:
         if state == _HOLDING:
             self._passed_stamp = None
             self._clear_stamp  = None
+        if state == _RECOVERING:
+            self._recovery_angle_rad    = 0.0
+            self._recovery_gyro_samples = 0
         logger.info("Emergency handler → %s", state)
 
     def _check_holding(self, now: float, elapsed: float):

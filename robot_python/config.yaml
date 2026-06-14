@@ -147,6 +147,14 @@ position:
   detect_every_n: 3              # run detector every Nth frame (~10 Hz at 30 fps)
   debug_image: false
 
+  # ── Position mode ────────────────────────────────────────────────────────────
+  # tag_only       : distance_m updates only when an AprilTag is detected (default, safe)
+  # dead_reckoning : distance_m is integrated continuously from wheel RPM between tag
+  #                  sightings. Zone stays as last seen tag. Resets to 0 on every
+  #                  new tag detection — ground truth always wins.
+  #                  Uses robot.wheel_radius_m from the robot section above.
+  position_mode: tag_only
+
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
@@ -221,6 +229,17 @@ emergency_handler:
   n_tags: 10
   yield_zone_gap: 3
   position_timeout_s: 3.0
+
+  # ── RECOVERING exit mode ─────────────────────────────────────────────────────
+  # timer : exit after recovery_duration_s (default — safe, always works)
+  # gyro  : exit after the robot has rotated recovery_target_deg as measured by
+  #         the STM32 IMU (gyro_z, rad/s). Falls back to timer if insufficient
+  #         valid gyro samples accumulate — so this is always safe.
+  #         IMU is inside the chassis near motors → use spike rejection.
+  recovery_exit_mode: timer
+  recovery_target_deg: 30.0       # degrees to rotate before exiting (gyro mode)
+  gyro_max_rad_s: 4.0             # spike filter — discard |gyro_z| above this
+  gyro_min_samples: 3             # min valid readings before trusting accumulation
 
 
 # ── Joystick ──────────────────────────────────────────────────────────────────

@@ -343,13 +343,15 @@ def main():
     # ── Position estimator + broadcaster ─────────────────────────────────
     pc = cfg['position']
     estimator = PositionEstimator(
-        n_inner_tags=pc['n_inner_tags'],
-        n_outer_tags=pc['n_outer_tags'],
-        tag_spacing_m=pc['tag_spacing_m'],
-        tag_size_m=pc['tag_size_m'],
-        focal_px=pc['focal_px'],
-        detect_every_n=pc['detect_every_n'],
-        debug=args.debug_position or pc.get('debug_image', False),
+        n_inner_tags   = pc['n_inner_tags'],
+        n_outer_tags   = pc['n_outer_tags'],
+        tag_spacing_m  = pc['tag_spacing_m'],
+        tag_size_m     = pc['tag_size_m'],
+        focal_px       = pc['focal_px'],
+        detect_every_n = pc['detect_every_n'],
+        debug          = args.debug_position or pc.get('debug_image', False),
+        position_mode  = pc.get('position_mode', 'tag_only'),
+        wheel_radius_m = cfg['robot']['wheel_radius_m'],
     )
 
     pbc      = cfg['position_broadcaster']
@@ -396,6 +398,10 @@ def main():
         n_tags                 = ec.get('n_tags',                 10),
         yield_zone_gap         = ec.get('yield_zone_gap',         3),
         position_timeout_s     = ec.get('position_timeout_s',     3.0),
+        recovery_exit_mode     = ec.get('recovery_exit_mode',     'timer'),
+        recovery_target_deg    = ec.get('recovery_target_deg',    30.0),
+        gyro_max_rad_s         = ec.get('gyro_max_rad_s',         4.0),
+        gyro_min_samples       = ec.get('gyro_min_samples',       3),
     )
 
     # ── Vision stream (desktop browser) ──────────────────────────────────
@@ -445,6 +451,7 @@ def main():
     _crop_y          = int(lc['crop_top_ratio'] * cc['height'])
     _run_log         = RunLogger(enabled=cfg.get('logging', {}).get('run_log', True))
     own_pos          = None    # last known position (survives frames where camera unavailable)
+    _telem           = None    # latest telemetry dict (fetched per frame in armed path)
 
     try:
         while True:
@@ -508,6 +515,12 @@ def main():
                 handler.update_peer_position(peer_pos)
                 handler.update_emergency(bridge.is_emergency() or _sim_emergency)
 
+                # Odometry — non-blocking (background thread caches telemetry at 10 Hz)
+                # No-op when position_mode: tag_only (the default)
+                _telem = driver.get_telemetry()
+                if _telem is not None:
+                    estimator.update_odometry(_telem, time.monotonic())
+
             # ── Zone sync — tell the follower which zone we're in ─────────
             zone = own_pos['zone'] if own_pos else -1
             follower.set_zone(zone)
@@ -524,12 +537,14 @@ def main():
                 # Autonomous — lane following through emergency handler
                 vx, wz = follower.process(frame)
                 dbg = follower.get_debug_info()
+                gyro_z = _telem.get('gyro_z', 0.0) if _telem else 0.0
                 vx, wz = handler.process(
                     vx, wz,
                     boundary_near = follower.is_boundary_near(),
                     white_found   = (dbg.get('mode') == 'WHITE'),
                     yellow_cx     = dbg.get('yellow_cx'),
                     outer_tag     = estimator.is_off_track(),
+                    gyro_z        = gyro_z,
                 )
             else:
                 # No camera, no joystick — hold stop

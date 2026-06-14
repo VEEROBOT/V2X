@@ -25,6 +25,7 @@ License:
 """
 
 import logging
+import math
 from typing import Optional, Dict
 
 import cv2
@@ -42,8 +43,15 @@ class PositionEstimator:
                  tag_size_m: float = 0.08,
                  focal_px: float = 250.0,
                  detect_every_n: int = 3,
-                 debug: bool = False):
-
+                 debug: bool = False,
+                 position_mode: str = 'tag_only',
+                 wheel_radius_m: float = 0.065):
+        """
+        position_mode: 'tag_only'       — distance_m from tag pixel width (default)
+                       'dead_reckoning' — distance_m integrated from wheel RPM;
+                                         reset to 0 on every AprilTag detection
+        wheel_radius_m: physical wheel radius — only used in dead_reckoning mode
+        """
         self._n_inner    = n_inner_tags
         self._n_outer    = n_outer_tags
         self._n_tags     = n_inner_tags   # used by EmergencyHandler via get_position
@@ -52,13 +60,19 @@ class PositionEstimator:
         self._focal      = float(focal_px)
         self._every_n    = detect_every_n
         self._debug      = debug
+        self._pos_mode   = position_mode
+        self._wheel_radius = wheel_radius_m
 
-        self._frame_cnt     = 0
-        self._last_zone     = -1
-        self._last_dist     = 0.0
-        self._off_track     = False
-        self._last_corners  = []   # all corners from last detection frame
-        self._last_ids      = []   # matching IDs
+        self._frame_cnt      = 0
+        self._last_zone      = -1
+        self._last_dist      = 0.0
+        self._off_track      = False
+        self._last_corners   = []   # all corners from last detection frame
+        self._last_ids       = []   # matching IDs
+
+        # Dead-reckoning state (only used when position_mode == 'dead_reckoning')
+        self._dist_since_tag = 0.0
+        self._last_odom_t    = 0.0
 
         # AprilTag 36h11 — compatible with OpenCV 4.5.x and 4.7+
         self._aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
@@ -109,6 +123,8 @@ class PositionEstimator:
             self._last_zone = raw_id
             self._last_dist = dist_m
             self._off_track = False
+            if self._pos_mode == 'dead_reckoning':
+                self._dist_since_tag = 0.0   # ground truth resets odometry
             logger.debug("Inner tag id=%d  zone=%d  dist≈%.2fm", raw_id, raw_id, dist_m)
         elif raw_id < self._n_inner + self._n_outer:
             # Outer reference tag — robot has drifted off the inner oval
@@ -126,13 +142,37 @@ class PositionEstimator:
             cv2.imshow("position", dbg)
             cv2.waitKey(1)
 
+    def update_odometry(self, telem: dict, now: float) -> None:
+        """
+        Accumulate forward distance from wheel RPM since the last AprilTag.
+        Call at telemetry rate (~10 Hz). No-op in tag_only mode.
+        Uses avg of four wheel RPMs — works even if one wheel slips.
+        """
+        if self._pos_mode != 'dead_reckoning':
+            return
+        if self._last_zone < 0:
+            return   # no reference yet — don't accumulate blind
+        dt = now - self._last_odom_t
+        self._last_odom_t = now
+        if not (0 < dt < 0.5):
+            return   # reject first call (huge dt) and stale gaps
+        rpms = telem.get('wheel_rpm', [0.0, 0.0, 0.0, 0.0])
+        avg_rpm = sum(abs(r) for r in rpms) / 4.0
+        dist = avg_rpm * (2.0 * math.pi * self._wheel_radius / 60.0) * dt
+        # Cap at 2 × spacing — don't trust odometry beyond two tags of travel
+        self._dist_since_tag = min(self._dist_since_tag + dist, self._spacing * 2.0)
+
     def get_position(self) -> Optional[Dict]:
         """Returns {"zone": int, "distance_m": float, "off_track": bool} or None if no inner tag seen yet."""
         if self._last_zone < 0:
             return None
+        if self._pos_mode == 'dead_reckoning':
+            dist = round(self._dist_since_tag, 3)
+        else:
+            dist = round(self._last_dist, 3)
         return {
             'zone':       self._last_zone,
-            'distance_m': round(self._last_dist, 3),
+            'distance_m': dist,
             'off_track':  self._off_track,
         }
 
