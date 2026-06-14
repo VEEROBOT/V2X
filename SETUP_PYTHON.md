@@ -11,10 +11,12 @@
 ```
 1. Flash Ubuntu 24.04 to SD card
 2. Boot Pi, update, clone repo
-3. Edit 1 line in the OBU config (RSU / Desktop IP)
-4. sudo bash setup.sh car        ← does everything automatically
-5. sudo reboot
-6. v2x_run_car                   ← clean start (regenerates auth config + keys)
+3. git config --global user.name "Your Name"
+   git config --global user.email "you@email.com"
+4. Edit 1 line in the OBU config (RSU / Desktop IP)
+5. sudo bash setup.sh car        ← does everything automatically
+6. sudo reboot
+7. v2x_run_car                   ← clean start (regenerates auth config + keys)
 ```
 
 ---
@@ -47,7 +49,20 @@ cd ~/projects/V2X
 
 ---
 
-## Step 3 — Set the laptop IP (the one thing you edit)
+## Step 3 — Set up git identity
+
+The Pi is where code changes are made and pushed. Set your git identity so commits are attributed correctly:
+
+```bash
+git config --global user.name "Praveen"
+git config --global user.email "pravi.khm@gmail.com"
+```
+
+This is a one-time step per Pi — it persists across reboots in `~/.gitconfig`.
+
+---
+
+## Step 4 — Set the laptop / RSU IP (the one thing you edit)
 
 Both the car and ambulance read the laptop IP from the same file:
 
@@ -70,7 +85,7 @@ That is the only file you need to edit. Everything else (`obu_local.json`, entit
 
 ---
 
-## Step 4 — Run setup.sh
+## Step 5 — Run setup.sh
 
 ```bash
 cd ~/projects/V2X/robot_python
@@ -101,7 +116,7 @@ After setup, `obu_local.json` is owned by the current user so the run scripts ca
 
 ---
 
-## Step 5 — Reboot
+## Step 6 — Reboot
 
 ```bash
 sudo reboot
@@ -116,7 +131,7 @@ sudo journalctl -fu v2x_ambulance   # ambulance
 
 ---
 
-## Step 6 — First clean start
+## Step 7 — First clean start
 
 After the service starts, run the appropriate command to regenerate the auth config, clear any stale keys, and get a confirmed-clean session:
 
@@ -280,6 +295,35 @@ jstest /dev/input/js0
 # Live drive diagnostics (motors + telemetry)
 python3 diag_drive.py
 ```
+
+---
+
+## When the laptop / RSU IP changes
+
+Only **one file** controls all network IPs: `v2x_testbed/obu/config/obu1_config.json`.
+The run scripts read from it; the robot Pi IPs are irrelevant (they bind to 0.0.0.0 and
+the RSU alerts via subnet broadcast).
+
+```bash
+# On a Pi — update both fields to the new laptop IP:
+nano ~/projects/V2X/v2x_testbed/obu/config/obu1_config.json
+# Set "rsu_ip" and "desktop_ip" to the new IP
+
+git commit -am "update laptop IP to 192.168.x.x"
+git push
+
+# On the other Pi:
+git pull && v2x_run_car       # or v2x_run_ambulance
+```
+
+**What does NOT need to change when Pi IPs change:** nothing. The robots
+bind to `0.0.0.0` and the RSU sends emergency alerts to `192.168.0.255`
+(subnet broadcast). A new Pi IP assigned by the router is transparent.
+
+**When RSU moves to its own Pi** (separate from Desktop): additionally edit
+`v2x_testbed/rsu/config/rsu_config.json` and change `"desktop_ip"` from
+`"127.0.0.1"` to the Desktop laptop's actual network IP. Then also split
+`rsu_ip` and `desktop_ip` in `obu1_config.json` to point to different machines.
 
 ---
 
