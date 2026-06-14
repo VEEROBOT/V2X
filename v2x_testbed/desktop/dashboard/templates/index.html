@@ -227,6 +227,16 @@
         }
 
         // WebSocket
+        socket.on('entity_status_changed', e => {
+            const row = document.getElementById('ent-' + e.entity_id);
+            if (row) {
+                row.outerHTML = entityRow(e);
+            } else {
+                // New entity appeared — re-render whole table
+                fetch('/api/entities').then(r => r.json()).then(updateEntityTable);
+            }
+        });
+
         socket.on('auth_event', e => {
             addEvt(elog, e, 100);
             addEvt(elogFull, e, 500);
@@ -255,17 +265,21 @@
         }
 
         // Entity table
-        function updateEntityTable(entities) {
-            const tb = document.getElementById('entity-table');
-            if (!entities || !entities.length) return;
-            tb.innerHTML = entities.map(e =>
-                '<tr><td><strong>' + e.entity_id + '</strong></td>' +
+        function entityRow(e) {
+            const online = e.online_status === 'ONLINE';
+            const dot = '<span style="color:' + (online ? '#34d399' : '#4b5563') + ';font-size:1.1em;" title="' + (online ? 'ONLINE' : 'OFFLINE') + '">●</span>';
+            return '<tr id="ent-' + e.entity_id + '">' +
+                '<td>' + dot + ' <strong>' + e.entity_id + '</strong></td>' +
                 '<td>' + e.entity_type + '</td>' +
                 '<td>' + e.ip_address + '</td>' +
                 '<td>' + (e.is_emergency ? '🚑 Yes' : 'No') + '</td>' +
                 '<td><span class="status-badge status-' + e.status + '">' + e.status + '</span></td>' +
-                '<td>' + (e.registered_at || '').substring(0, 19) + '</td></tr>'
-            ).join('');
+                '<td>' + (e.registered_at || '').substring(0, 19) + '</td></tr>';
+        }
+        function updateEntityTable(entities) {
+            const tb = document.getElementById('entity-table');
+            if (!entities || !entities.length) return;
+            tb.innerHTML = entities.map(entityRow).join('');
         }
 
         setInterval(async () => {

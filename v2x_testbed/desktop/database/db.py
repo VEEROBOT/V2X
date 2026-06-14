@@ -47,6 +47,16 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         with open(schema_path, "r") as f:
             conn.executescript(f.read())
+        # Migration: add columns that may not exist in older databases
+        for col_sql in [
+            "ALTER TABLE entities ADD COLUMN online_status TEXT DEFAULT 'OFFLINE'",
+            "ALTER TABLE entities ADD COLUMN last_heartbeat TEXT",
+        ]:
+            try:
+                conn.execute(col_sql)
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
         conn.close()
         print(f"[DB] Database initialized at {self.db_path}")
 
@@ -80,6 +90,43 @@ class Database:
         )
         conn.commit()
         conn.close()
+
+    def set_entity_online_status(self, entity_id: str, status: str):
+        """Set online_status to ONLINE or OFFLINE. Returns updated entity dict or None."""
+        conn = self._connect()
+        conn.row_factory = sqlite3.Row
+        now = datetime.now(timezone.utc).isoformat()
+        if status == 'ONLINE':
+            conn.execute(
+                "UPDATE entities SET online_status=?, last_heartbeat=? WHERE entity_id=?",
+                (status, now, entity_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE entities SET online_status=? WHERE entity_id=?",
+                (status, entity_id)
+            )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM entities WHERE entity_id=?", (entity_id,)
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_stale_online_entities(self, timeout_seconds: int = 30) -> list:
+        """Return ONLINE entities whose last_heartbeat is older than timeout_seconds."""
+        conn = self._connect()
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """SELECT * FROM entities WHERE online_status='ONLINE' AND (
+                last_heartbeat IS NULL OR
+                CAST(strftime('%s','now') AS INTEGER) -
+                CAST(strftime('%s', last_heartbeat) AS INTEGER) > ?
+            )""",
+            (timeout_seconds,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     def get_all_entities(self):
         conn = self._connect()

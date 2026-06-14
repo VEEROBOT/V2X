@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS entities (
     is_emergency    INTEGER DEFAULT 0,
     registered_at   TEXT NOT NULL,
     public_key_hex  TEXT,
-    status          TEXT DEFAULT 'OFFLINE' CHECK(status IN ('OFFLINE', 'REGISTERED', 'ONLINE'))
+    status          TEXT DEFAULT 'OFFLINE' CHECK(status IN ('OFFLINE', 'REGISTERED', 'ONLINE')),
+    online_status   TEXT DEFAULT 'OFFLINE',
+    last_heartbeat  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS auth_events (

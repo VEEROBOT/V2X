@@ -24,10 +24,12 @@ License:
     Proprietary - See LICENSE file for terms and conditions.
 """
 
-from flask import Flask, render_template, jsonify, Response
+from flask import Flask, render_template, jsonify, Response, request
 from flask_socketio import SocketIO
 import json
 import logging
+import threading
+import time
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -106,6 +108,20 @@ def api_buffer_stats():
     return jsonify(db.get_buffer_stats())
 
 
+@app.route("/api/entity_status", methods=["POST"])
+def api_entity_status():
+    """Called by v2x_bridge heartbeat and v2x_obu_trigger to report ONLINE/OFFLINE."""
+    data = request.get_json(force=True, silent=True) or {}
+    entity_id = data.get("entity_id", "").strip()
+    status    = data.get("status", "OFFLINE")
+    if not entity_id or status not in ("ONLINE", "OFFLINE"):
+        return jsonify({"error": "invalid"}), 400
+    entity = db.set_entity_online_status(entity_id, status)
+    if entity:
+        socketio.emit("entity_status_changed", entity)
+    return jsonify({"ok": True})
+
+
 @app.route("/export/<table_name>")
 def export_csv(table_name):
     """Download a table as CSV."""
@@ -143,10 +159,26 @@ def handle_connect():
 # START
 # =============================================================================
 
+def _watchdog_loop():
+    """Mark entities OFFLINE when their heartbeat goes silent (battery death, crash, etc.)."""
+    while True:
+        time.sleep(20)
+        try:
+            stale = db.get_stale_online_entities(timeout_seconds=30)
+            for entity in stale:
+                updated = db.set_entity_online_status(entity["entity_id"], "OFFLINE")
+                if updated:
+                    socketio.emit("entity_status_changed", updated)
+                    print(f"[DASH] {entity['entity_id']} heartbeat lost — marked OFFLINE")
+        except Exception:
+            pass
+
+
 def start_dashboard(database):
     """Start the dashboard web server."""
     global db
     db = database
+    threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog").start()
     print(f"[DASH] Dashboard starting on http://localhost:{config.DASHBOARD_PORT}")
     socketio.run(app, host="0.0.0.0", port=config.DASHBOARD_PORT,
                  allow_unsafe_werkzeug=True, log_output=False)

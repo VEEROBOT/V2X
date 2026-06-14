@@ -29,6 +29,7 @@ import socket
 import subprocess
 import threading
 import time
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +66,32 @@ class V2XBridge:
                 self._manual_mode = False
                 logger.info("OBU binary found — switching to OBU mode")
 
-        self._emergency = False
-        self._obu_proc  = None
-        self._running   = False
+        self._emergency    = False
+        self._obu_proc     = None
+        self._running      = False
+        self._desktop_url  = None   # set in start() from obu_config
+        self._entity_id    = ''
 
     def start(self):
         if self._running:
             return
         self._running = True
+
+        # Load Desktop URL from obu_local.json for heartbeat
+        if self._obu_config and os.path.isfile(self._obu_config):
+            try:
+                with open(self._obu_config) as f:
+                    cfg = json.load(f)
+                ip  = cfg.get('desktop_ip', '')
+                eid = cfg.get('entity_id', '')
+                if ip and eid:
+                    self._desktop_url = f'http://{ip}:5000/api/entity_status'
+                    self._entity_id   = eid
+            except Exception:
+                pass
+        if self._desktop_url:
+            threading.Thread(target=self._heartbeat_loop, daemon=True,
+                             name='v2x_heartbeat').start()
 
         if not self._manual_mode:
             self._start_obu()
@@ -90,6 +109,8 @@ class V2XBridge:
                 self._obu_proc.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
                 self._obu_proc.kill()
+        # Best-effort OFFLINE notification (heartbeat loop also does this on exit)
+        self._notify_desktop('OFFLINE')
 
     def set_emergency(self, active: bool):
         self._emergency = active
@@ -104,6 +125,28 @@ class V2XBridge:
         return (f"role={self._role}  "
                 f"emergency={'ACTIVE' if self._emergency else 'CLEAR'}  "
                 f"mode={mode}  obu_pid={pid}")
+
+    # ── Desktop heartbeat ────────────────────────────────────────────────────
+    def _notify_desktop(self, status: str):
+        if not self._desktop_url:
+            return
+        try:
+            payload = json.dumps({'entity_id': self._entity_id,
+                                  'status': status}).encode()
+            req = urllib.request.Request(
+                self._desktop_url, data=payload,
+                headers={'Content-Type': 'application/json'}, method='POST')
+            urllib.request.urlopen(req, timeout=3)
+        except Exception:
+            pass  # Desktop unreachable — silently ignore
+
+    def _heartbeat_loop(self):
+        self._notify_desktop('ONLINE')   # immediate on start
+        while self._running:
+            time.sleep(15)
+            if self._running:
+                self._notify_desktop('ONLINE')
+        self._notify_desktop('OFFLINE')  # clean stop
 
     # ── OBU subprocess ───────────────────────────────────────────────────────
     def _start_obu(self):

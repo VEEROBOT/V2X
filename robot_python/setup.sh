@@ -257,8 +257,10 @@ ln -sf "$SCRIPT_DIR/v2x_run_ambulance.sh" /usr/local/bin/v2x_run_ambulance
 ln -sf "$SCRIPT_DIR/v2x_robot_log.sh"     /usr/local/bin/v2x_robot_log
 echo "  v2x_run_car / v2x_run_ambulance / v2x_robot_log → /usr/local/bin/"
 
-# ── 12. Systemd service ──────────────────────────────────────────────────────
-echo "[12/12] Installing systemd service (v2x_$ROLE)..."
+# ── 12. Systemd services ─────────────────────────────────────────────────────
+echo "[12/12] Installing systemd services (v2x_$ROLE + v2x_obu_trigger)..."
+
+# Main robot service
 SERVICE_SRC="$SCRIPT_DIR/v2x_${ROLE}.service"
 SERVICE_DST="/etc/systemd/system/v2x_${ROLE}.service"
 if [ ! -f "$SERVICE_SRC" ]; then
@@ -266,8 +268,35 @@ if [ ! -f "$SERVICE_SRC" ]; then
     exit 1
 fi
 cp "$SERVICE_SRC" "$SERVICE_DST"
+
+# Joystick OBU trigger service (runs as root so it can start/stop the robot service)
+# MODE_BUTTON: check your controller with: jstest /dev/input/js0
+#   Common: 8 = Mode on many RF gamepads, 6 = Select/Back on Xbox-style
+MODE_BUTTON=8
+cat > /etc/systemd/system/v2x_obu_trigger.service << SVCEOF
+[Unit]
+Description=V2X OBU joystick trigger (Mode button → start/stop OBU)
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${SCRIPT_DIR}
+ExecStart=${VENV}/bin/python3 ${SCRIPT_DIR}/v2x_obu_trigger.py ${ROLE} ${MODE_BUTTON}
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
 systemctl daemon-reload
 systemctl enable "v2x_${ROLE}"
+systemctl enable v2x_obu_trigger
+echo "  v2x_${ROLE}.service  → enabled"
+echo "  v2x_obu_trigger.service → enabled (Mode=btn${MODE_BUTTON}, edit service to change)"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
