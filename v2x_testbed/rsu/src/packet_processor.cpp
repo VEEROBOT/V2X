@@ -393,8 +393,6 @@ void PacketProcessor::handle_post_auth(const Bytes& data,
                                         int sender_port) {
     Timer timer;
     timer.start("total");
-    std::cout << "[PROC] Post-auth message from " << sender_ip << ":" << sender_port << std::endl;
-
     // HEADER_SIZE + 4 (enc_len field) + 1 (min payload) + 32 (HMAC)
     if (data.size() < HEADER_SIZE + 4 + 1 + 32) {
         std::cout << "[PROC] Post-auth too small (" << data.size() << " bytes), ignoring" << std::endl;
@@ -447,6 +445,7 @@ void PacketProcessor::handle_post_auth(const Bytes& data,
         bool first = !session->is_emergency;
         if (first) {
             // First emergency heartbeat for this session — log once, print once
+            std::cout << "[PROC] Post-auth from " << sender_ip << ":" << sender_port << std::endl;
             std::cout << "[PROC] 🚑 EMERGENCY VEHICLE DETECTED — Granting priority" << std::endl;
             session->is_emergency = true;
             log_event("EMERGENCY_PRIORITY_GRANTED", to_hex(session->pid_obu, 16), "RSU",
