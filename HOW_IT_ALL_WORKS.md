@@ -763,7 +763,7 @@ This was not built for a single demonstration. It was built to be extended.
 ### The Hardware
 
 The robots run on the Wolf platform: powder-coated aluminium chassis, high-grip wheels,
-ring-lit camera mount, purpose-built for field use.
+powerful hardware, purpose-built for field use.
 
 The STM32 motor controller is a custom-designed and fabricated PCB. It runs a real-time
 operating system. It reads four hardware encoders — one per wheel. The motor control loop
@@ -790,7 +790,7 @@ to someone standing at the side of the table.
 What is visible is this:
 
 Two robots are driving laps around an oval track.
-A browser dashboard shows both — green dots, entity IDs, live session counts, 9ms latency.
+A browser dashboard shows both — green dots, entity IDs, live session counts, and latency.
 The ambulance reaches the car from behind.
 The car moves to the inner edge of the track.
 The ambulance passes.
