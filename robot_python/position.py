@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """
-AprilTag-based road position estimator.
+File: position.py
+Module: V2X Robot Platform — AprilTag Position Estimator
 
-Inner-track tags (IDs 0 … n_inner_tags-1) define the zone the robot is in
-and are the primary following reference.  Outer-track tags (IDs n_inner_tags
-… n_inner_tags+n_outer_tags-1) are recovery references: seeing one means the
-robot has drifted off the inner oval; the last known inner zone is preserved
-but is_off_track() returns True.
+Purpose:
+    Estimates the robot's zone on the oval track by detecting AprilTag markers
+    via the downward-facing camera. Inner-track tags (IDs 0…n_inner_tags-1)
+    define the current zone; outer-track tags flag an off-track condition while
+    preserving the last known inner zone for recovery. Zone information is
+    broadcast over UDP so the car can determine if the ambulance is behind it.
 
-Arena layout (arena.svg):
-  10 inner tags  — along the white oval boundary, spaced ~0.61 m apart
-   8 outer tags  — around the outer yellow race boundary (recovery only)
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-get_position() → {"zone": int, "distance_m": float, "off_track": bool}
-                 or None until the first inner tag is seen.
+Arena Layout:
+    10 inner tags — white oval boundary, spaced ~0.61 m apart
+     8 outer tags — yellow race boundary (recovery / off-track detection only)
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

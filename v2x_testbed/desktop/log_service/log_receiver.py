@@ -22,6 +22,10 @@ Protocol: Length-prefixed JSON messages
   [length: 4 bytes big-endian] [JSON payload: N bytes]
 
 RSU connects to Desktop:9000 and sends events continuously.
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import socket

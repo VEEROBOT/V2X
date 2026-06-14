@@ -1,7 +1,25 @@
 """
-Lyra telemetry packet parser.
-Handles the binary telemetry structure from STM32F405.
+File: telemetry.py
+Module: V2X Robot Platform — STM32 Telemetry Parser
 
+Purpose:
+    Parses the binary telemetry structure broadcast by the STM32F405 motor
+    controller at 10 Hz. Extracts timestamp, wheel RPM, wheel ticks, status
+    flags, battery voltage, accelerometer data, and gyroscope Z rate into a
+    Python dict for use by the robot driver and stream overlays.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+Telemetry Struct (66 bytes):
+    uint32 timestamp_ms, float[4] wheel_rpm, int32[4] wheel_ticks,
+    uint16 status_flags, float battery_v, float accel_xyz[3], float gyro_z
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import struct

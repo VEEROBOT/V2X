@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-V2X bridge — connects V2X infrastructure to the robot stack.
+File: v2x_bridge.py
+Module: V2X Robot Platform — V2X Infrastructure Bridge
 
-Two operation modes selected at startup:
+Purpose:
+    Connects the V2X authentication infrastructure to the robot autonomy stack.
+    Supports two modes: MANUAL (no OBU, test via UDP control socket) and OBU
+    (spawns obu_client subprocess; ambulance authenticates with RSU which then
+    sends a UDP alert to the car). Manages OBU subprocess lifecycle, RSU alert
+    listener, and session heartbeat threads.
 
-  MANUAL (default, manual_mode=True):
-    No OBU binary. Use the UDP control socket or set_emergency() directly.
-    Useful for integration testing without real V2X hardware.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.1
 
-  OBU (manual_mode=False or auto-detected when obu_binary path exists):
-    Spawns ./obu_client <config> --loop 1 as a subprocess.
-    Car:       obu_loop_count=1  — authenticate once, session lasts 300s, OBU exits.
-    Ambulance: obu_loop_count=0  — re-authenticates every ~300s to keep emergency active.
-    Ambulance: OBU authenticates with RSU → RSU sends UDP alert to car.
-    Car: listens on car_alert_port for RSU JSON notifications.
+Key Methods:
+    start() / stop()
+    set_emergency(bool)   — manual override for testing
+    is_emergency() → bool — True when V2X session is authenticated + active
 
-Public API:
-  bridge.start()
-  bridge.stop()
-  bridge.set_emergency(True/False)   — manual override (always works)
-  bridge.is_emergency() → bool
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import json

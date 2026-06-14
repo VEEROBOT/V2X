@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 """
-Emergency handler — car-only state machine.
+File: emergency_handler.py
+Module: V2X Robot Platform — Emergency Vehicle Evasion State Machine
 
-Sits between lane_follower output and the robot driver.
-In normal operation passes (vx, wz) straight through.
-When an ambulance V2X emergency is active AND the ambulance is behind the
-car, the handler drives a five-state evasion sequence:
+Purpose:
+    Car-only state machine that intercepts lane_follower output and executes
+    a five-state emergency evasion sequence when a V2X authenticated ambulance
+    is detected behind the car:
+        NORMAL → EVADING → HOLDING → RECOVERING → RESUMING → NORMAL
+    In normal operation all commands pass through unmodified. Evasion is
+    gated on both V2X authentication (Signal A) and known relative position
+    via AprilTag UDP broadcast (Signal B).
 
-  NORMAL → EVADING → HOLDING → RECOVERING → RESUMING → NORMAL
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-EVADING   : fixed veer toward the evasion boundary (inner island or outer edge,
-            controlled by evasion_side config).  Default: inner (right turn CW).
-HOLDING   : slow creep while hugging the evasion boundary
-RECOVERING: arc back to white line.  Exits early if white line re-acquired and/or a
-            tag is detected (robot has a position fix near the oval).
-            Falls back to timeout if line is never found.
-RESUMING  : ramp follower output back up from zero over ramp_duration_s
+State Summary:
+    EVADING   — fixed veer toward evasion boundary (inner island default)
+    HOLDING   — slow creep at boundary; exits when ambulance zone passes car
+    RECOVERING — arc back to white line; falls back to timeout
+    RESUMING  — ramp lane_follower output back up over ramp_duration_s
 
-Usage:
-  eh = EmergencyHandler(cfg)
-  eh.update_own_position(pos_dict)       # called after position.process()
-  eh.update_peer_position(pos_dict)      # called after broadcaster.get_peer_position()
-  eh.update_emergency(True/False)        # called after v2x_bridge.is_emergency()
-
-  vx, wz = eh.process(vx_line, wz_line,
-                       boundary_near=False,
-                       white_found=False)
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

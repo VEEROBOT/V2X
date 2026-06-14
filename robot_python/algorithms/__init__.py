@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
 """
-Lane follower factory.
+File: __init__.py
+Module: V2X Robot Platform — Lane Follower Algorithm Factory
 
-Usage in main_car.py:
+Purpose:
+    Package entry point for the algorithms module. Provides the
+    create_follower() factory function that instantiates the lane-following
+    algorithm selected in config.yaml (centroid, pure_pursuit, recorded_path).
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+Usage:
     from algorithms import create_follower
     follower = create_follower(cfg['lane_follower'], debug=True)
 
 To add a new algorithm:
-    1. Create algorithms/my_algo.py with a class that extends BaseFollower.
+    1. Create algorithms/my_algo.py extending BaseFollower.
     2. Import it below and add a branch in create_follower().
     3. Set  lane_follower.algorithm: my_algo  in config.yaml.
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 from .centroid       import CentroidFollower

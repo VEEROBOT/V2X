@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-V2X Ambulance Robot — pure Python main loop.
+File: main_ambulance.py
+Module: V2X Robot Platform — Ambulance Robot Main Loop
 
-No emergency handler — the ambulance drives through while broadcasting V2X.
+Purpose:
+    Entry point for the V2X Ambulance Robot. Drives the ambulance autonomously
+    while broadcasting V2X emergency status via the OBU client. No emergency
+    handler — the ambulance has right-of-way and drives through. Supports manual
+    override via joystick deadman, and A/B buttons to test emergency broadcast
+    without real V2X hardware.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.1
 
 Usage:
-  python3 main_ambulance.py
-  python3 main_ambulance.py --car-ip 192.168.1.x
-  python3 main_ambulance.py --debug-image
-  python3 main_ambulance.py --obu-binary ../v2x_testbed/obu/build/obu_client \\
-                            --obu-config  ../v2x_testbed/obu/config/obu_local.json
+    python3 main_ambulance.py
+    python3 main_ambulance.py --car-ip 192.168.1.x
+    python3 main_ambulance.py --obu-binary <path> --obu-config <path>
 
-Joystick:
-  Hold LB (deadman)  → manual drive
-  Start              → arm / disarm
-  A button           → simulate V2X emergency ON  (test without OBU)
-  B button           → simulate V2X emergency OFF
-
-Trigger emergency broadcast (manual, from another terminal):
-  python3 control_socket.py --port 5011 emergency_on
-  python3 control_socket.py --port 5011 emergency_off
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import argparse

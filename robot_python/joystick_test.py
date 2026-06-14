@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Press buttons and move sticks — see their index numbers printed live."""
+"""
+File: joystick_test.py
+Module: V2X Robot Platform — Joystick Diagnostic Tool
+
+Purpose:
+    Interactive test utility that prints joystick button and axis index
+    numbers live as you press buttons and move sticks. Use this to identify
+    the correct axis/button indices for config.yaml on a new controller.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
+"""
 import os, time
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"

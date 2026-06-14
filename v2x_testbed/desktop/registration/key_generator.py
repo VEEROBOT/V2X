@@ -22,6 +22,10 @@ Key Operations:
 Currently uses placeholder (random bytes) for development.
 When customer provides lattice crypto C++ binary, this module
 calls it via subprocess instead.
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import os

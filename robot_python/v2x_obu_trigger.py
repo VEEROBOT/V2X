@@ -1,18 +1,27 @@
 #!/usr/bin/env python3
 """
-v2x_obu_trigger.py — joystick Mode button → toggle V2X OBU service.
+File: v2x_obu_trigger.py
+Module: V2X Robot Platform — Joystick V2X OBU Toggle Service
 
-Reads /dev/input/js0 using the raw Linux joystick API (no pygame, no conflict
-with main_car.py or main_ambulance.py). On Mode button press: if the v2x service
-is active → stop it (OFFLINE); if stopped → regenerate config, clear keys,
-restart it (ONLINE).
+Purpose:
+    Systemd service that watches the joystick Mode button (default button 8)
+    and toggles the V2X OBU systemd service on each press. Uses the raw Linux
+    joystick API directly (no pygame) so it runs alongside main_car.py or
+    main_ambulance.py without /dev/input/js0 conflicts. On toggle-on it
+    regenerates OBU config, clears old keys, and restarts the service.
 
-Installed as v2x_obu_trigger.service by setup.sh.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-Usage: python3 v2x_obu_trigger.py [car|ambulance] [mode_button_index]
+Usage:
+    python3 v2x_obu_trigger.py [car|ambulance] [mode_button_index]
+    Installed as v2x_obu_trigger.service by setup.sh.
 
-Mode button index: check your controller with  jstest /dev/input/js0
-  Common values: 8 = Mode on many RF gamepads, 6 = Select/Back on Xbox-style
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import json

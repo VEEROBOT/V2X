@@ -1,30 +1,28 @@
 #!/usr/bin/env python3
 """
-Pure Pursuit lane follower.
+File: pure_pursuit.py
+Module: V2X Robot Platform — Pure Pursuit Lane Follower Algorithm
 
-Instead of a single averaged centroid, the ROI is scanned in horizontal
-strips to build a list of (row_from_bottom, centroid_x) points along the
-detected white line.  A "lookahead point" is selected at a configurable
-distance ahead of the robot.  Steering is computed using the Pure Pursuit
-geometric formula:
+Purpose:
+    Geometric lane-following algorithm based on the Pure Pursuit controller.
+    Scans the ROI in horizontal strips to find a lookahead point on the white
+    line and steers using curvature = 2*Lx/(Lx²+Ly²). Starts turning earlier
+    on curves than centroid, requires only one gain (kpp), and naturally slows
+    on sharp bends.
 
-    curvature = 2 * Lx / (Lx² + Ly²)
-    wz        = -kpp * curvature
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-where Lx is the lateral offset of the lookahead point and Ly is its
-forward distance (both in pixels).
+Key Parameters:
+    kpp            — steering gain (raise if too gentle, lower if oscillating)
+    lookahead_frac — fraction of ROI height for lookahead (0.3 aggressive,
+                     0.6 smooth)
 
-Advantages over centroid
-  • The robot starts turning earlier on curves because the lookahead point
-    is already displaced before the curve apex.
-  • No PID integral/derivative — one tuning knob (kpp) instead of three.
-  • Speed naturally scales with curvature (sharper curve → slower).
-
-Key tuning parameters
-  kpp           — gain; raise if turning is too gentle, lower if oscillating.
-  lookahead_frac — fraction of ROI height used as lookahead distance.
-                   0.3 = aggressive (short lookahead, quick response),
-                   0.6 = smooth (longer lookahead, gentler curves).
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

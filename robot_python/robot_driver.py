@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 """
-Robot driver — thin wrapper around the Lyra binary protocol.
+File: robot_driver.py
+Module: V2X Robot Platform — STM32 Motor Controller Driver
 
-Manages serial communication with the STM32 motor controller.
-Runs three internal timers in a single background thread:
-  - 20 Hz: send current velocity command (or zero if stale / disarmed)
-  - 10 Hz: request telemetry
-  -  1 Hz: send heartbeat
+Purpose:
+    Thread-safe wrapper around the Lyra binary protocol for UART communication
+    with the STM32F405 motor controller. Runs arm/disarm/e-stop, velocity
+    commands (sent at 20 Hz), telemetry polling (10 Hz), and heartbeat (1 Hz)
+    in a single background thread. Provides automatic reconnect on serial loss.
 
-Public API (thread-safe):
-  driver.arm()
-  driver.disarm()
-  driver.estop()
-  driver.set_velocity(vx, wz)   — stores command; motor loop sends it at 20 Hz
-  driver.get_telemetry()         — returns last parsed telemetry dict or None
-  driver.is_armed()
-  driver.is_connected()
-  driver.start() / driver.stop()
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+Key Methods:
+    arm() / disarm() / estop()
+    set_velocity(vx, wz)    — stores command; dispatched at 20 Hz
+    get_telemetry()          — returns latest STM32 telemetry dict or None
+    is_armed() / is_connected()
+    start() / stop()
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

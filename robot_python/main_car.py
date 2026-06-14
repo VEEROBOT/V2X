@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
-V2X Car Robot — pure Python main loop.
+File: main_car.py
+Module: V2X Robot Platform — Car Robot Main Loop
 
-Node graph (replaces entire ROS2 launch):
-  Camera → lane_follower → emergency_handler → robot_driver → STM32
-  Camera → position_estimator → position_broadcaster ↔ UDP ↔ ambulance
-  v2x_bridge ← RSU UDP alert (or manual control socket)
-  joystick → overrides lane_follower when deadman held
+Purpose:
+    Entry point for the V2X Car Robot. Orchestrates the full autonomy pipeline:
+    camera → lane_follower → emergency_handler → robot_driver → STM32, with
+    AprilTag position estimation, UDP position broadcasting, V2X bridge for
+    ambulance emergency detection, and joystick manual override. Replaces the
+    entire ROS2 launch graph with a single Python process.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.1
 
 Usage:
-  python3 main_car.py
-  python3 main_car.py --ambulance-ip 192.168.1.x
-  python3 main_car.py --debug-image --debug-position
-  python3 main_car.py --obu-binary /home/pi/v2x/obu/build/obu_client \\
-                      --obu-config  /home/pi/v2x/obu/config/obu1_config.json \\
-                      --ambulance-ip 192.168.1.x
+    python3 main_car.py
+    python3 main_car.py --ambulance-ip 192.168.1.x
+    python3 main_car.py --obu-binary <path> --obu-config <path>
+    python3 main_car.py --debug-image --debug-position
 
-Manual emergency (from another terminal on same Pi):
-  python3 control_socket.py --port 5010 emergency_on
-  python3 control_socket.py --port 5010 emergency_off
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import argparse

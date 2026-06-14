@@ -1,8 +1,23 @@
 """
-Lyra Bridge - Binary Protocol Layer
-Implements Lyra Protocol packet parsing and command building.
+File: protocol.py
+Module: V2X Robot Platform — Lyra Binary Protocol Layer
 
-Frame format: [0xAA 0x55] [seq] [cmd] [len] [payload...] [CRC16-LE]
+Purpose:
+    Implements the Lyra Protocol binary frame format for communication with the
+    STM32F405 motor controller. Provides packet building (arm, disarm, velocity
+    commands) and parsing (telemetry, ACK, NACK) with CRC16 integrity checking.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+Frame Format:
+    [0xAA 0x55] [seq:1B] [cmd:1B] [len:1B] [payload:N bytes] [CRC16-LE:2B]
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import struct

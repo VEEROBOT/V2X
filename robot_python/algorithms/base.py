@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
-Abstract base class for lane-following algorithms.
+File: base.py
+Module: V2X Robot Platform — Lane Follower Base Class
 
-Each algorithm must implement:
-  process(frame)   → (vx_m_s, wz_rad_s)
-  get_mode()       → 'WHITE' | 'YELLOW' | 'LOST' | 'INIT'
-  get_debug_info() → {'mode': str, 'white_err': int|None, 'last_wz': float}
-  get_roi_panels() → BGR ndarray (left=annotated ROI, right=HSV mask) or None
+Purpose:
+    Abstract base class that defines the interface all lane-following
+    algorithms must implement. Provides shared HSV colour thresholds,
+    crop parameters, speed limits, and lost-line timeout logic.
 
-Common colour detection (_compute_masks) lives here so every algorithm
-shares identical HSV thresholding without code duplication.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 from abc import ABC, abstractmethod

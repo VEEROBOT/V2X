@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
 """
-Camera abstraction — picamera2 primary, cv2.VideoCapture fallback.
+File: camera.py
+Module: V2X Robot Platform — Camera Abstraction Layer
 
-On Ubuntu 22.04+ with Raspberry Pi Camera Module:
-  Use picamera2 (wraps libcamera). Install via:
-    sudo apt install python3-picamera2
-  or:
-    pip install picamera2
+Purpose:
+    Unified camera interface supporting picamera2 (Raspberry Pi Camera Module
+    via libcamera) with automatic fallback to cv2.VideoCapture for development
+    on a desktop/laptop. Returns BGR numpy arrays for OpenCV processing.
 
-On a desktop/laptop for development testing:
-  Falls back to cv2.VideoCapture(device) automatically.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
 Usage:
-  cam = Camera(width=320, height=240, use_picamera2=True)
-  cam.start()          # returns True if opened successfully
-  frame = cam.get_frame()  # BGR numpy array (H×W×3) or None
-  cam.stop()
+    cam = Camera(width=320, height=240, use_picamera2=True)
+    cam.start()
+    frame = cam.get_frame()   # BGR numpy array (H×W×3) or None
+    cam.stop()
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

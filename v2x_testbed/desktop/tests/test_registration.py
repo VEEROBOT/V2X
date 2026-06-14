@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 """
-V2X Testbed — Registration Test Client
-Simulates an OBU or RSU connecting to the Desktop for registration.
+File: test_registration.py
+Module: V2X Authentication Testbed — Registration Test Client
+
+Purpose:
+    Standalone test client that simulates an OBU or RSU connecting to the
+    Desktop registration server. Validates the full key provisioning flow
+    and verifies correct key sizes are returned for the configured provider.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 15th February 2026
+Version: 1.0
 
 Usage:
-  python3 test_registration.py              # Test OBU1 registration
-  python3 test_registration.py OBU2 8001    # Test OBU2
-  python3 test_registration.py RSU 8002     # Test RSU
+    python3 test_registration.py              # Test OBU1 on port 8001
+    python3 test_registration.py OBU2 8001    # Test OBU2
+    python3 test_registration.py RSU 8002     # Test RSU
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import socket

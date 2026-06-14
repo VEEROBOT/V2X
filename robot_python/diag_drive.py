@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 """
-Drive robot with joystick while printing telemetry live.
-Shows armed state, stall flags, wheel RPM, cmd_age — reveals what causes stutter.
+File: diag_drive.py
+Module: V2X Robot Platform — Diagnostic Drive Tool
+
+Purpose:
+    Diagnostic tool for manual driving with live telemetry printout. Reads
+    joystick input and drives the robot while displaying armed state, stall
+    flags, wheel RPM, and command age — useful for diagnosing stutter and
+    motor controller behaviour without running the full autonomy stack.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
 Usage:
-  python3 diag_drive.py
-  Hold LB to drive. Watch the output. Ctrl-C to stop.
+    python3 diag_drive.py
+    Hold LB to drive. Ctrl-C to stop.
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 import os, sys, time, threading, logging
 os.environ["SDL_VIDEODRIVER"] = "dummy"

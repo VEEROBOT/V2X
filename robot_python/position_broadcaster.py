@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-UDP position broadcaster — supports any number of cars and ambulances.
+File: position_broadcaster.py
+Module: V2X Robot Platform — UDP Position Broadcaster
 
-All robots broadcast their position to the subnet broadcast address.
-Each robot listens on the same port and tracks all non-self peers.
+Purpose:
+    Broadcasts each robot's AprilTag zone over UDP at 10 Hz to the subnet
+    broadcast address, enabling Pi-to-Pi relative position awareness without
+    a laptop or ROS network. All robots listen on the same port; cars track
+    the nearest ambulance and ambulances track the most recent car. Position
+    data older than 5 seconds is treated as stale and ignored.
 
-Cars:       get_peer_position() returns the nearest ambulance position.
-Ambulances: get_peer_position() returns the most recent car position.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-Usage:
-  pb = PositionBroadcaster(peer_ip='192.168.0.255', role='car')
-  pb.start()
-  pb.set_own_position(pos_dict)
-  peer = pb.get_peer_position()    # dict or None
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import json

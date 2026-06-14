@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """
-UDP control socket — manual command interface.
+File: control_socket.py
+Module: V2X Robot Platform — UDP Control Socket
 
-Replaces ROS2 service calls for testing without OBU hardware.
-Listens on localhost:<port> for JSON commands.
+Purpose:
+    Manual command interface via UDP JSON messages. Replaces ROS2 service calls
+    for testing without OBU hardware. Listens on localhost:<port> and dispatches
+    commands (emergency_on/off, arm, disarm, estop, status) to the robot stack.
 
-Supported commands:
-  {"cmd": "emergency_on"}
-  {"cmd": "emergency_off"}
-  {"cmd": "arm"}
-  {"cmd": "disarm"}
-  {"cmd": "estop"}
-  {"cmd": "status"}
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-Send from another terminal:
-  python3 -c "import socket,json; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(json.dumps({'cmd':'emergency_on'}).encode(), ('127.0.0.1', 5010))"
-  # or use the helper:
-  python3 control_socket.py --port 5010 emergency_on
+Usage:
+    python3 control_socket.py --port 5010 emergency_on
+    python3 control_socket.py --port 5010 emergency_off
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import json

@@ -1,32 +1,29 @@
 #!/usr/bin/env python3
 """
-Recorded Path lane follower — Learning from Demonstration.
+File: recorded_path.py
+Module: V2X Robot Platform — Recorded Path Lane Follower Algorithm
 
-Training phase (press X button while driving manually one full loop):
-  Records the commanded curvature (wz/vx) per AprilTag zone.  Each zone
-  is a fixed segment of the track, so 10 numbers capture where the track
-  turns and by how much.
+Purpose:
+    Learning-from-Demonstration lane follower. Records commanded curvature
+    per AprilTag zone during a manual training lap, then blends that feedforward
+    term with live Pure Pursuit camera output during autonomous replay:
+        wz = wz_ff * ff_blend  +  wz_camera * (1 − ff_blend)
+    Helps the robot pre-steer on curves where camera reaction is delayed.
+    Degrades gracefully to pure pursuit if use_training_data is false.
 
-Replay phase (autonomous mode):
-  Blends a feedforward term from the training data with the live Pure
-  Pursuit camera output:
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-      wz = wz_ff * ff_blend  +  wz_camera * (1 − ff_blend)
+Key Parameters:
+    ff_blend           — feedforward weight (0.7 recommended)
+    use_training_data  — false = pure pursuit mode (no feedforward)
+    training_data_file — path to JSON file (default: ~/v2x_training.json)
 
-  ff_blend = 0 → pure camera (same as pure_pursuit)
-  ff_blend = 1 → pure training data (ignores camera)
-  ff_blend = 0.7 → recommended starting point
-
-Why this helps:
-  The camera can struggle on curves (delayed reaction, centroid lag).
-  The training data knows the curve is coming and pre-steers, while the
-  camera provides the fine error correction.
-
-Disabling:
-  Set  use_training_data: false  in config.yaml — feedforward is ignored
-  entirely and the algorithm degrades gracefully to pure pursuit.
-
-Training file:  ~/v2x_training.json  (auto-saved, survives reboots)
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import json

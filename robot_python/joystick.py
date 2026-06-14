@@ -1,34 +1,28 @@
 #!/usr/bin/env python3
 """
-Joystick input — reads RF joystick via USB dongle using pygame.
+File: joystick.py
+Module: V2X Robot Platform — Joystick Input Handler
 
-The USB dongle appears as /dev/input/js0 (standard Linux HID joystick).
-pygame reads it transparently. SDL_VIDEODRIVER=dummy lets it run headless
-on a Pi without a connected display.
+Purpose:
+    Reads RF joystick commands via USB dongle using pygame (SDL headless via
+    SDL_VIDEODRIVER=dummy). Provides a simple deadman-hold interface: while the
+    deadman button is held the robot follows stick input; when released the main
+    loop switches to autonomous lane following. Safe to use when no joystick is
+    connected — start() returns False and the system runs fully autonomously.
 
-Behaviour:
-  Hold deadman button  → joystick controls robot (manual mode)
-  Release deadman      → returns None → main loop uses autonomous driving
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
 
-Axis mapping (defaults match a standard gamepad, configure in config.yaml):
-  axis_throttle : left stick Y  (inverted — push forward = positive speed)
-  axis_steering : right stick X
+Axis / Button Mapping (configurable in config.yaml):
+    axis_throttle  — left stick Y (inverted, push forward = positive vx)
+    axis_steering  — right stick X
+    deadman_button — hold to drive (default 5 = LB / L1)
 
-Button mapping:
-  deadman_button : hold to drive  (default 5 = LB / L1)
-
-Usage:
-  js = Joystick(...)
-  js.start()   # returns False if no joystick found (safe — system runs autonomously)
-
-  cmd = js.get_command()
-  if cmd is not None:
-      vx, wz = cmd   # manual override
-  else:
-      # autonomous
-
-Check connected:
-  js.connected()  # True if joystick was found and initialised
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

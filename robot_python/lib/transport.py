@@ -1,11 +1,21 @@
 """
-Lyra Bridge - Serial Transport Layer (THREAD-SAFE VERSION)
-Handles UART communication with STM32 controller with auto-reconnect.
+File: transport.py
+Module: V2X Robot Platform — UART Serial Transport Layer
 
-FIXES:
-- Added locks for buffer access (Issue #1)
-- Added locks for serial operations (Issue #3)
-- Ensured non-blocking mode to prevent deadlock (Issue #5)
+Purpose:
+    Thread-safe UART serial transport for communication with the STM32F405
+    motor controller. Provides non-blocking read/write with automatic
+    reconnect on serial loss, and separate locks for buffer access and
+    serial operations to prevent deadlocks under concurrent access.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import serial

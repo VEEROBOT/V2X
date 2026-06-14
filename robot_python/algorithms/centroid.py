@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
-Centroid lane follower — the original algorithm.
+File: centroid.py
+Module: V2X Robot Platform — Centroid Lane Follower Algorithm
 
-Detects the white line centroid across the full ROI (bottom-weighted so
-near rows count 4× more than far rows) and applies a PD controller to
-steer toward it.
+Purpose:
+    Original lane-following algorithm. Detects the white line centroid across
+    the full ROI (bottom-weighted so near rows count 4× more than far rows)
+    and applies a PD controller to steer toward it. Simple and robust on
+    straights; may under-steer on tight curves due to centroid averaging.
 
-Strengths : simple, robust, works well on straights.
-Weaknesses: under-steers on tight curves because the far straight section
-            still pulls the centroid back toward centre.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

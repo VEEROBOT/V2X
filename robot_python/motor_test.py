@@ -1,3 +1,21 @@
+"""
+File: motor_test.py
+Module: V2X Robot Platform — Motor Controller Integration Test
+
+Purpose:
+    Quick integration test script for the STM32 motor controller. Arms the
+    robot, sends a forward velocity command, then disarms. Used to verify
+    serial communication and motor response during hardware bring-up.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.0
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
+"""
 from robot_driver import RobotDriver
 import time
 

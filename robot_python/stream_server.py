@@ -1,12 +1,27 @@
 #!/usr/bin/env python3
 """
-Lightweight MJPEG stream server.
+File: stream_server.py
+Module: V2X Robot Platform — MJPEG Stream Server
 
-Push frames with push_frame(bgr_img); view in any browser on the same
-network at  http://<robot-ip>:<port>/
+Purpose:
+    Lightweight MJPEG video stream server. Accepts frames via push_frame() and
+    serves the latest frame to any browser on the network. Supports multiple
+    concurrent viewers via threading and displays robot name, timestamp, battery
+    voltage, and Pi CPU temperature as on-frame overlays.
 
-Serves the latest frame only — clients always see the most recent image.
-Uses threading so multiple browser tabs don't block each other.
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 1st March 2026
+Version: 1.1
+
+Usage:
+    server = StreamServer(port=8080, name='V2X_CAR_01')
+    server.start()
+    server.push_frame(bgr_img)   # call at any rate; browser sees latest
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import logging

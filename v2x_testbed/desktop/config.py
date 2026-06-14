@@ -1,6 +1,27 @@
 """
-V2X Authentication Testbed — Desktop Configuration
-All IP addresses, ports, thresholds, and system-wide settings.
+File: config.py
+Module: V2X Authentication Testbed — Desktop Configuration
+
+Purpose:
+    Central configuration module for the V2X Desktop Server.
+    Defines all IP addresses, port assignments, key sizes, crypto provider
+    selection, and authentication parameters used across the desktop stack.
+
+Author(s): Praveen Kumar
+Company: Siliris Technologies Pvt. Ltd
+Created: 15th February 2026
+Version: 1.1
+
+Key Settings:
+    - Network addresses for RSU, OBU1, OBU2, and Desktop
+    - Registration ports: 8001 (OBU), 8002 (RSU)
+    - Crypto provider: 'placeholder' (ECDSA) or 'lattice' (post-quantum)
+    - Key sizes for both PlaceholderProvider and LatticeProvider
+    - Authentication thresholds (timestamp delta, session timeout)
+
+License:
+    Copyright (c) 2026 Siliris Technologies Pvt. Ltd.
+    Proprietary - See LICENSE file for terms and conditions.
 """
 
 import os
