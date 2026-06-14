@@ -644,11 +644,57 @@ which is what every professional system does.
 
 ---
 
-## 15. What We Built — And Why It Matters
+## 15. Why This Work Matters
 
-V2X — Vehicle-to-Everything communication — is where the automotive industry is heading.
-Governments are legislating it. Major manufacturers have spent billions standardising it.
-Most research demonstrations of it look like this:
+At first glance, the demonstration is straightforward.
+
+Two vehicles on a track. An ambulance approaches from behind. A car yields.
+The ambulance passes. The car resumes normal operation.
+
+The entire sequence takes under a minute.
+
+What that minute required is the subject of this section.
+
+---
+
+### The Chain
+
+The chain begins with mathematics.
+
+An emergency vehicle cryptographically proves its identity to a roadside unit:
+elliptic-curve key provisioning, ECDH session establishment, ECDSA digital signatures,
+HKDF session key derivation, AES-256-GCM encrypted messaging, HMAC-SHA-256 integrity
+validation. Thirty-two steps. Every one of them happens in under 10 milliseconds.
+
+The roadside unit validates the session and issues an authenticated emergency event
+over UDP to every node on the subnet.
+
+At the same time — entirely independent of the V2X stack — each robot reads AprilTag
+markers with a downward-facing camera and broadcasts its zone directly to the subnet
+at 10 Hz. The car knows where the ambulance is. The V2X system and the position system
+never talk to each other. The car's state machine combines them.
+
+Three conditions must all be true before the car does anything:
+
+1. Is the emergency event V2X-authenticated?
+2. Is the ambulance's position known and fresh?
+3. Is the ambulance close enough and behind the car?
+
+Only when all three are true does the evasion sequence begin.
+
+The car moves to the inner edge. It holds while the ambulance passes. It recovers and
+resumes speed.
+
+**No human presses a button at any stage. No script injects a trigger. No simulation
+stands in for any component.**
+
+The chain begins with cryptographic key provisioning.
+It ends with wheels turning on a physical track.
+Every link in between is real.
+
+---
+
+Most V2X research demonstrations look like this:
 
 ```
 Node A sends a UDP packet that says "I am an emergency vehicle"
@@ -657,116 +703,114 @@ Node B receives it and prints a message
 
 That is not V2X. That is a hello world program with a siren sticker on it.
 
-What we at Siliris built is different.
+---
+
+### Scale
+
+This work spans engineering domains that are normally taught as separate courses and
+staffed by separate teams:
+
+| Domain | What it means in this system |
+|--------|------------------------------|
+| Embedded Systems | STM32F405, RTOS, hardware encoders, custom-designed and fabricated PCB |
+| Computer Vision | Real-time lane detection and AprilTag localization under real lighting |
+| Robotics | Five-state emergency evasion state machine, closed-loop velocity control |
+| V2X Networking | OBU/RSU architecture, 32-step mutual authentication, live UDP broadcast |
+| Applied Cryptography | ECDH, ECDSA, HKDF, AES-256-GCM, HMAC-SHA-256 |
+| Distributed Systems | Multi-node coordination with no central controller, peer failure tolerance |
+| Real-Time Control | 20 Hz motor loop at guaranteed timing via RTOS |
+| Human-Machine Interfaces | WebSocket dashboard, MJPEG video with live telemetry overlay |
+| Edge Computing | Full stack on Raspberry Pi 5 — no cloud, no laptop required at runtime |
+| Autonomous Navigation | Three swappable lane-following algorithms, tunable per deployment |
+
+Each of these domains is a substantial engineering discipline on its own.
+
+This platform contains enough material for four independent final-year projects.
+
+One team could spend a semester on the robot alone.
+A second on the V2X authentication stack.
+A third on the dashboard and monitoring infrastructure.
+A fourth on the cryptographic protocol.
+
+This work required all four to exist simultaneously and operate as a single system.
 
 ---
 
-### Two complete systems — most people struggle to finish one
+### A Platform, Not a Proof of Concept
 
-This project is not a single codebase. It is two independently functional systems that
-work together:
+Most demonstrations are built for one outcome. This one was designed with defined
+interfaces at every boundary so that any layer can be replaced without touching the rest.
 
-**System 1 — Robot mobility platform:**
-two autonomous ground robots, lane following with computer vision, AprilTag-based
-positioning, a five-state emergency evasion state machine, STM32 motor control,
-live MJPEG camera streaming, joystick interface.
+**Lane-following algorithm:** centroid, pure pursuit, or recorded-path — one line in
+`config.yaml`. The robot does not know which one is running.
 
-**System 2 — V2X authentication platform:**
-cryptographic key provisioning, 32-step mutual authentication protocol, AES-256-GCM
-encrypted post-auth messaging, RSU session management, real-time dashboard with WebSocket
-event streaming, audit logging, performance metrics, a crypto abstraction layer designed
-to accept post-quantum algorithms when they are ready.
+**Cryptographic provider:** placeholder (ECDSA/ECDH) or lattice (post-quantum) —
+the 32-step protocol does not change. The interface is already there. Plug in the
+post-quantum implementation when it is ready.
 
-Either of these alone is be a complete project.
-Both of them working together is a Marvel.
+**AprilTag layout:** change the number of inner or outer track markers in config —
+the localization logic and yield decision adapt automatically.
 
----
+**Motor controller:** Lyra binary protocol over UART — the STM32 firmware can be
+retargeted without touching a single line of Python.
 
-### What the authentication actually does
+Swappable algorithms. Swappable crypto. Swappable hardware targets.
 
-No part of the security chain is faked. When the ambulance authenticates with the RSU,
-this is what happens — every single time:
-
-```
-Desktop generates EC P-256 keypairs, distributes them over TCP to each entity
-
-Ambulance OBU:
-  → generates PID_OBU (random session identifier)
-  → ECDH encapsulates using RSU's public key
-  → signs the packet with its own private key (ECDSA)
-  → sends AuthRequest: [PID | timestamp | encapsulated_key | signature]
-
-RSU:
-  → checks timestamp is within ±500ms              (replay prevention)
-  → verifies ECDSA signature                        (forgery prevention)
-  → ECDH decapsulates to derive shared secret
-  → derives SK_enc + SK_mac via HKDF               (session key derivation)
-  → sends AuthResponse
-
-Both sides:
-  → Key Confirmation exchange (KC1 / KC2)           (mutual authentication)
-  → Session established
-
-Ambulance OBU sends post-auth payload:
-  → AES-256-GCM encrypted with SK_enc
-  → HMAC-SHA-256 integrity protected with SK_mac
-  → payload contains: is_emergency = true
-
-RSU decrypts, reads is_emergency
-  → broadcasts EMERGENCY_ACTIVE on UDP to 192.168.0.255:5001
-  → every robot on the subnet receives it
-
-Car's bridge receives EMERGENCY_ACTIVE
-  → emergency handler activates
-  → cross-checks ambulance zone via direct Pi-to-Pi UDP position sharing
-  → _should_yield(): authenticated emergency + known position + ambulance ≤ 3 zones behind
-  → EVADING → HOLDING → RECOVERING → RESUMING → NORMAL
-```
-
-That is a protocol. Not a demo.
+This was not built for a single demonstration. It was built to be extended.
 
 ---
 
-### The configuration depth is a feature, not a warning sign
+### The Hardware
 
-There are a lot of parameters in `config.yaml`. Evasion speeds, recovery durations, yield
-gaps, HSV thresholds, crop ratios, tag spacings, ramp durations.
+The robots run on the Wolf platform: powder-coated aluminium chassis, high-grip wheels,
+ring-lit camera mount, purpose-built for field use.
 
-Systems that can be tuned are systems that are sophisticated enough to need tuning.
-A toy demo has two sliders.
+The STM32 motor controller is a custom-designed and fabricated PCB. It runs a real-time
+operating system. It reads four hardware encoders — one per wheel. The motor control loop
+executes at a guaranteed 20 Hz regardless of what the Raspberry Pi is doing at that moment.
+
+Hardware encoders mean the robot follows a commanded velocity — it does not guess.
+RTOS means the control loop is never preempted by a lower-priority task.
+These are not implementation details. They are the difference between a robot that
+behaves predictably and one that does not.
+
+The camera observes real lane markings under real and variable lighting.
+The wireless network carries real latency and real packet loss.
+Authentication occurs on a live network, not a loopback interface.
+
+Nothing is controlled. Nothing is ideal. Nothing is simulated.
 
 ---
 
-### The moment it becomes undeniable
+### The Moment It Becomes Undeniable
 
-The crypto is invisible. The ECDH, the HKDF, the AES-GCM — none of it is visible to
-someone watching. What is visible is this:
+The cryptography is invisible. The ECDH, the HKDF, the AES-GCM — none of it is visible
+to someone standing at the side of the table.
 
-Someone walks into the room.
+What is visible is this:
+
 Two robots are driving laps around an oval track.
-A browser dashboard shows both of them — green dots, entity IDs, live session counts.
+A browser dashboard shows both — green dots, entity IDs, live session counts, 9ms latency.
 The ambulance reaches the car from behind.
 The car moves to the inner edge of the track.
 The ambulance passes.
 The car recovers and resumes speed.
-The dashboard shows: EMERGENCY_PRIORITY_GRANTED, session latency 9ms, no failures.
+The dashboard shows: EMERGENCY_PRIORITY_GRANTED. No failures.
 
-Nobody in that room is thinking about the mathematics underneath.
+Nobody in that room is thinking about the mathematics.
+
 They are thinking: *this works.*
 
 That is the point.
 
 ---
 
-### What this is in a line
+### In One Sentence
 
-**A working implementation of authenticated V2X emergency vehicle priority —
-from cryptographic session establishment to physical lane evasion on real autonomous
-hardware, running on two Raspberry Pi 5s, a custom STM32 motor controller, and
-an oval track on a table.**
-
-The fact that it fits in a room is what makes it demonstrable.
-The fact that none of it is simulated is what makes it real.
+**This project demonstrates authenticated V2X emergency vehicle priority — from
+cryptographic session establishment to physical lane evasion — on autonomous vehicles
+operating in the real world, on real hardware, with no simulation and no human
+intervention at any stage.**
 
 ---
 
