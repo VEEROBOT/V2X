@@ -437,6 +437,9 @@ void PacketProcessor::handle_post_auth(const Bytes& data,
 
     std::string payload_str(plaintext.begin(), plaintext.end());
 
+    // Keep session alive while heartbeats are arriving
+    sessions_.touch(session->pid_obu);
+
     // Step 3: Check for emergency flag
     std::string sid_hex = to_hex(session->session_id);
     bool is_emergency = (payload_str.find("\"is_emergency\":true") != std::string::npos);

@@ -7,7 +7,7 @@
     "desktop_reg_port": 8002,
     "delta_ts_ms": 500,
     "receive_buffer_size": 50,
-    "session_timeout_seconds": 300,
+    "session_timeout_seconds": 60,
     "crypto_provider": "placeholder",
     "key_directory": "./keys/",
     "log_level": "INFO",

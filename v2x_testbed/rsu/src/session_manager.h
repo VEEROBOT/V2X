@@ -103,6 +103,15 @@ public:
         }
     }
 
+    /** Refresh last_activity so the session doesn't expire while heartbeats are arriving. */
+    void touch(const Bytes& pid_obu) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        auto it = sessions_.find(pid_to_key(pid_obu));
+        if (it != sessions_.end()) {
+            it->second.last_activity = std::chrono::steady_clock::now();
+        }
+    }
+
     /**
      * Remove expired sessions. Returns count removed.
      */
