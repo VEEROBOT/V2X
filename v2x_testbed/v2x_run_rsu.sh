@@ -9,6 +9,7 @@ set -e
 TESTBED="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 RSU_BIN="$TESTBED/rsu/build/rsu_server"
 RSU_CFG="$TESTBED/rsu/config/rsu_config.json"
+RSU_KEYS="$TESTBED/rsu/build/keys"
 
 if [ ! -f "$RSU_BIN" ]; then
     echo "ERROR: RSU binary not found: $RSU_BIN"
@@ -16,5 +17,12 @@ if [ ! -f "$RSU_BIN" ]; then
     exit 1
 fi
 
+# Clear saved keys so RSU re-registers with Desktop and gets fresh credentials.
+# The RSU binary resolves ./keys/ relative to CWD — always cd into rsu/build/
+# so the path is consistent regardless of where this script is invoked from.
+echo "[v2x] Clearing RSU keys: $RSU_KEYS"
+rm -rf "$RSU_KEYS"
+
 echo "[v2x] Starting RSU..."
+cd "$TESTBED/rsu/build"
 "$RSU_BIN" "$RSU_CFG"
