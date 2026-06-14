@@ -19,19 +19,21 @@ import cv2
 
 logger = logging.getLogger(__name__)
 
-_HTML = b"""<!DOCTYPE html>
+_HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
 <head>
-  <title>Robot Vision</title>
+  <title>{name} | Robot Vision</title>
   <style>
-    body { background:#111; margin:0; display:flex; flex-direction:column;
+    body {{ background:#111; margin:0; display:flex; flex-direction:column;
            align-items:center; justify-content:center; min-height:100vh; color:#aaa;
-           font-family:monospace; }
-    img  { max-width:100%; image-rendering:pixelated; border:1px solid #333; }
-    p    { font-size:0.75em; margin:4px 0; }
+           font-family:monospace; }}
+    h2   {{ color:#ccc; margin:8px 0 2px; font-size:0.95em; letter-spacing:0.1em; }}
+    img  {{ max-width:100%; image-rendering:pixelated; border:1px solid #333; }}
+    p    {{ font-size:0.75em; margin:4px 0; }}
   </style>
 </head>
 <body>
+  <h2>{name}</h2>
   <img src="/stream" />
   <p>Green line = frame centre &nbsp;|&nbsp;
      Orange line = lane target &nbsp;|&nbsp;
@@ -48,8 +50,10 @@ class _ThreadedHTTP(ThreadingMixIn, HTTPServer):
 
 class StreamServer:
 
-    def __init__(self, port: int = 5005):
+    def __init__(self, port: int = 5005, name: str = 'Robot'):
         self._port    = port
+        self._name    = name
+        self._html    = _HTML_TEMPLATE.format(name=name).encode()
         self._lock    = threading.Lock()
         self._jpeg    = b''
         self._running = False
@@ -96,7 +100,7 @@ class StreamServer:
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html')
                 self.end_headers()
-                self.wfile.write(_HTML)
+                self.wfile.write(outer._html)
 
             def _stream(self):
                 self.send_response(200)

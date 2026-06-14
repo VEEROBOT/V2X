@@ -27,6 +27,7 @@ import csv
 import logging
 import os
 import signal
+import socket
 import sys
 import threading
 import time
@@ -150,13 +151,18 @@ def _pi_temp() -> str:
 
 
 def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
-                     estimator, bridge, joystick, armed, vx, wz, driver=None):
+                     estimator, bridge, joystick, armed, vx, wz, driver=None, name=''):
     import cv2, numpy as np
     from datetime import datetime
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
     cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
     cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
+
+    # Robot name — top-left, black outline for visibility over any background
+    if name:
+        cv2.putText(top, name, (5, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3)
+        cv2.putText(top, name, (5, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
 
     # Timestamp top-right corner
     ts = datetime.now().strftime('%H:%M:%S')
@@ -322,8 +328,12 @@ def main():
     # ── Vision stream (desktop browser) ──────────────────────────────────────
     stc = cfg.get('stream', {})
     streamer = None
+    _robot_name = ''.join(
+        c for c in socket.gethostname().upper().replace('-', '_')
+        if c.isalnum() or c == '_'
+    )
     if stc.get('enabled', False):
-        streamer = StreamServer(port=stc.get('port', 5005))
+        streamer = StreamServer(port=stc.get('port', 5005), name=_robot_name)
         streamer.start()
 
     # ── Control socket ────────────────────────────────────────────────────────
@@ -400,7 +410,7 @@ def main():
                     _push_stream_amb(streamer, frame, panels, _crop_y,
                                      estimator, bridge, joystick,
                                      _robot_armed, _stream_vx, _stream_wz,
-                                     driver=driver)
+                                     driver=driver, name=_robot_name)
 
             if not _robot_armed:
                 if frame is None:
