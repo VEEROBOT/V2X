@@ -272,13 +272,9 @@ echo "║  Setup complete!                                              ║"
 echo "║                                                              ║"
 echo "║  Before rebooting, edit these files:                         ║"
 echo "║                                                              ║"
-if [ "$ROLE" = "car" ]; then
 echo "║  v2x_testbed/obu/config/obu1_config.json                     ║"
-echo "║    → set rsu_ip to your laptop/RSU WiFi IP                   ║"
-else
-echo "║  v2x_testbed/obu/config/obu2_config.json                     ║"
-echo "║    → set rsu_ip to your laptop/RSU WiFi IP                   ║"
-fi
+echo "║    → set rsu_ip and desktop_ip to your laptop WiFi IP        ║"
+echo "║    (both car and ambulance read from this same file)          ║"
 echo "║                                                              ║"
 echo "║  Then:  sudo reboot                                          ║"
 echo "║  Check: sudo journalctl -fu v2x_$ROLE                        ║"

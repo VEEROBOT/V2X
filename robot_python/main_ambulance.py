@@ -8,9 +8,8 @@ Usage:
   python3 main_ambulance.py
   python3 main_ambulance.py --car-ip 192.168.1.x
   python3 main_ambulance.py --debug-image
-  python3 main_ambulance.py --obu-binary /home/pi/v2x/obu/build/obu_client \\
-                            --obu-config  /home/pi/v2x/obu/config/obu2_config.json \\
-                            --car-ip 192.168.1.x
+  python3 main_ambulance.py --obu-binary ../v2x_testbed/obu/build/obu_client \\
+                            --obu-config  ../v2x_testbed/obu/config/obu_local.json
 
 Joystick:
   Hold LB (deadman)  → manual drive
