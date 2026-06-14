@@ -223,11 +223,16 @@ IS_EMERGENCY="false"
 if [ "$ROLE" = "ambulance" ]; then IS_EMERGENCY="true"; fi
 RSU_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.json')); print(c['rsu_ip'])" 2>/dev/null || echo "192.168.0.103")
 DESKTOP_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.json')); print(c['desktop_ip'])" 2>/dev/null || echo "192.168.0.103")
+# Ambulance re-authenticates every ~2s from the same port, which causes RSU session
+# lookup collisions. Port 0 lets the OS assign a fresh ephemeral port each restart,
+# so every new auth cycle has a unique ip:port key in the RSU session table.
+UDP_LISTEN_PORT=5003
+if [ "$ROLE" = "ambulance" ]; then UDP_LISTEN_PORT=0; fi
 cat > "$OBU_DIR/config/obu_local.json" << OBUEOF
 {
     "entity_id": "${ENTITY_ID}",
     "obu_ip": "0.0.0.0",
-    "udp_listen_port": 5003,
+    "udp_listen_port": ${UDP_LISTEN_PORT},
     "rsu_ip": "${RSU_IP}",
     "rsu_port": 5000,
     "desktop_ip": "${DESKTOP_IP}",
