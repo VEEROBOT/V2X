@@ -495,8 +495,9 @@ Recommended workflow:
 | Dashboard (4-tab)          | ✅ Complete                                 |
 | Throughput Measurement     | ✅ Complete                                 |
 | Packet Loss Tracking       | ✅ Complete                                 |
+| Live ONLINE/OFFLINE Status | ✅ Complete (heartbeat + watchdog)          |
 | Lattice Crypto Integration | ⚠ Interface Ready (Implementation Pending) |
-| Robot Mobility (Phase 2)   | ⬜ Not Started                              |
+| Robot Mobility (Phase 2)   | ✅ Operational — Pi 5 robots on oval track  |
 
 ---
 

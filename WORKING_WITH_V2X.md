@@ -180,9 +180,13 @@ After both Pis connect, `http://localhost:5000` should show:
 | Field | Expected |
 |-------|---------|
 | ENTITIES | **3** — RSU, V2X (car), V2X_EMGY (ambulance) |
+| ONLINE status | Green dot ● next to car and ambulance; grey ● = OFFLINE |
+| Emergency column | 🚑 Yes for V2X_EMGY, No for car and RSU |
 | EVENT COUNTS | SESSION_ESTABLISHED incrementing, no failures |
 | EMERGENCY PRIORITY GRANTS | counting up (ambulance re-auths every ~2 s) |
 | AVG LATENCY | ~8–15 ms |
+
+The entity table updates live via WebSocket — no page refresh needed. If a robot's battery dies or crashes, the dashboard marks it OFFLINE automatically within ~50 s (heartbeat watchdog).
 
 Or check from the command line:
 ```bash
@@ -222,12 +226,12 @@ Car:       http://192.168.0.100:5005/
 Ambulance: http://192.168.0.104:5005/
 ```
 
-Both can be open in different tabs simultaneously.
+Both can be open in different tabs simultaneously. The browser tab title shows the robot name (e.g. `V2X_CAR_01 | Robot Vision`).
 
 ### What you see
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+┌─ V2X_CAR_01 ────────────────────────────── 23:14:05 ────────┐
 │  Full camera frame (640 px wide)                             │
 │  ─── yellow dashed line = crop boundary ───────────────────  │
 ├──────────────────────┬───────────────────────────────────────┤
@@ -236,9 +240,15 @@ Both can be open in different tabs simultaneously.
 │  orange = target     │  yellow = yellow pixels detected      │
 │  red dot = centroid  │  black  = nothing                     │
 ├──────────────────────┴───────────────────────────────────────┤
-│  zone=3  vx=0.20  wz=+0.05  NORMAL                          │
+│  CAR zone=3  AMB zone=7  vx=0.20  wz=+0.05  NORMAL          │
+│  ARMED  AUTO  V2X:ACTIVE  BAT:7.4V  PI:52.3C                │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+- **Robot name** — top-left corner of frame, white text with black outline
+- **Time** — top-right corner (uses Pi system clock — set timezone with `sudo timedatectl set-timezone Asia/Kolkata`)
+- **BAT:X.XV** — battery voltage from STM32 ADC (accurate once voltage divider is wired)
+- **PI:XX.XC** — Pi CPU temperature live from sysfs
 
 ### HSV calibration via stream
 
@@ -261,14 +271,16 @@ Edit `robot_python/config.yaml`, commit, `git pull` on the Pi, `sudo systemctl r
 | Hold **LB + RB** (btn 4+5) | Turbo (0.8 m/s) | Turbo (0.8 m/s) |
 | Left stick Y | Forward / reverse | Forward / reverse |
 | Right stick X | Steer | Steer |
-| **A button** | — | Activate V2X emergency signal |
+| **A button** | — | Activate V2X emergency signal (test without OBU) |
 | **B button** | — | Cancel V2X emergency signal |
 | **X button** | Record training path | Record training path |
+| **Mode button** (btn 8) | Toggle OBU service on/off → ONLINE/OFFLINE on dashboard | Toggle OBU service on/off |
 | Release LB | Return to autonomous | Return to autonomous |
 
 > Both robots start **DISARMED** on every boot/restart. Always arm deliberately.
 > The joystick is detected automatically — wait ~10 s after boot if it wasn't plugged in first.
 > Run `jstest /dev/input/js0` to verify button numbers match your controller.
+> **Mode button** is handled by `v2x_obu_trigger.service` (runs as root, separate from the main robot service). Press once to start V2X; press again to stop. The dashboard shows the entity going ONLINE/OFFLINE in real time. If Mode does nothing, check: `sudo systemctl status v2x_obu_trigger`.
 
 ---
 
@@ -717,7 +729,7 @@ Expected and harmless. During `v2x_run_car` (which calls `systemctl restart`), t
 
 ### Known quirks
 
-- **Battery voltage ~4.7 V in STM32 logs** — normal. STM32 reads its internal ADC reference, not the actual battery. Ignore it.
+- **Battery voltage reads ~4.7 V** — STM32 ADC reads its internal voltage reference until an external voltage divider is wired to the ADC pin. Once the divider is in place the reading is real pack voltage.
 - **Ambulance OBU uses ephemeral port** — `obu_local.json` shows `udp_listen_port: 0`. The actual port varies per restart and is chosen by the OS. This is intentional.
 - **Desktop restart + OBU still visible** — correct behavior. The OBU re-authenticates every 2 s and re-registers itself automatically when Desktop comes back. To get a truly clean slate, stop both robot services before restarting Desktop.
 - **STM32 USB must be unplugged** during normal operation — USB overrides UART on the STM32 board.
