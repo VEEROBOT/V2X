@@ -235,6 +235,7 @@
         });
         socket.on('initial_state', s => {
             updateStats(s.stats);
+            if (s.entities) updateEntityTable(s.entities);
             if (s.recent_events) {
                 s.recent_events.reverse().forEach(e => { addEvt(elog, e, 100); addEvt(elogFull, e, 500); evtCount++; });
                 document.getElementById('evt-count').textContent = evtCount + ' events';
@@ -252,7 +253,27 @@
             document.getElementById('stat-tsfail').textContent = s.timestamp_failures || 0;
             document.getElementById('stat-latency').innerHTML = (s.avg_latency_ms || 0) + '<span class="unit"> ms</span>';
         }
-        setInterval(async () => { try { updateStats(await (await fetch('/api/stats')).json()); } catch(e){} }, 5000);
+
+        // Entity table
+        function updateEntityTable(entities) {
+            const tb = document.getElementById('entity-table');
+            if (!entities || !entities.length) return;
+            tb.innerHTML = entities.map(e =>
+                '<tr><td><strong>' + e.entity_id + '</strong></td>' +
+                '<td>' + e.entity_type + '</td>' +
+                '<td>' + e.ip_address + '</td>' +
+                '<td>' + (e.is_emergency ? '🚑 Yes' : 'No') + '</td>' +
+                '<td><span class="status-badge status-' + e.status + '">' + e.status + '</span></td>' +
+                '<td>' + (e.registered_at || '').substring(0, 19) + '</td></tr>'
+            ).join('');
+        }
+
+        setInterval(async () => {
+            try {
+                updateStats(await (await fetch('/api/stats')).json());
+                updateEntityTable(await (await fetch('/api/entities')).json());
+            } catch(e) {}
+        }, 5000);
 
         // Performance tab
         async function refreshPerf() {
