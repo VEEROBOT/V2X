@@ -18,7 +18,7 @@ RSU_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.
 DESKTOP_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.json')); print(c['desktop_ip'])" 2>/dev/null || echo "192.168.0.103")
 
 echo "[v2x] Regenerating OBU config: entity_id=${ENTITY_ID}  is_emergency=false"
-cat > "$OBU_CONFIG" << OBUEOF
+sudo tee "$OBU_CONFIG" > /dev/null << OBUEOF
 {
     "entity_id": "${ENTITY_ID}",
     "obu_ip": "0.0.0.0",
