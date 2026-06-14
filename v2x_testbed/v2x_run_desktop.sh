@@ -9,8 +9,8 @@ set -e
 TESTBED="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
 echo "[v2x] Clearing sessions and RSU keys..."
-rm -f  "$TESTBED/database/v2x_testbed.db"
-rm -f  "$TESTBED/database/master_secret.bin"
+rm -f  "$TESTBED/desktop/database/v2x_testbed.db"
+rm -f  "$TESTBED/desktop/database/master_secret.bin"
 rm -rf "$TESTBED/rsu/build/keys/"
 
 echo "[v2x] Starting Desktop server..."
