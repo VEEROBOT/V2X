@@ -140,13 +140,28 @@ def load_config(path: str, role: str = '') -> dict:
     return cfg
 
 
+def _pi_temp() -> str:
+    """Read Pi CPU temperature from sysfs. Returns e.g. '52.3C' or '---'."""
+    try:
+        raw = open('/sys/class/thermal/thermal_zone0/temp').read().strip()
+        return f"{int(raw) / 1000:.1f}C"
+    except Exception:
+        return '---'
+
+
 def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
-                     estimator, bridge, joystick, armed, vx, wz):
+                     estimator, bridge, joystick, armed, vx, wz, driver=None):
     import cv2, numpy as np
+    from datetime import datetime
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
     cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
     cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
+
+    # Timestamp top-right corner
+    ts = datetime.now().strftime('%H:%M:%S')
+    cv2.putText(top, ts, (570, 14),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
 
     corners, ids = estimator.get_last_detections()
     for pts, tag_id in zip(corners, ids):
@@ -187,6 +202,17 @@ def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
     emg_col = (0, 50, 220) if emg else (120, 120, 120)
     cv2.putText(bar2, emg_txt, (200, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, emg_col, 1)
+
+    # Battery from STM32 telemetry
+    telem = driver.get_telemetry() if driver else None
+    batt_txt = f"BAT:{telem['battery_v']:.1f}V" if telem else "BAT:---"
+    cv2.putText(bar2, batt_txt, (430, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (80, 200, 255), 1)
+
+    # Pi CPU temperature
+    temp_txt = f"PI:{_pi_temp()}"
+    cv2.putText(bar2, temp_txt, (530, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (80, 200, 255), 1)
 
     streamer.push_frame(np.vstack([top, mid, bar1, bar2]))
 
@@ -373,7 +399,8 @@ def main():
                     panels = follower.get_roi_panels()
                     _push_stream_amb(streamer, frame, panels, _crop_y,
                                      estimator, bridge, joystick,
-                                     _robot_armed, _stream_vx, _stream_wz)
+                                     _robot_armed, _stream_vx, _stream_wz,
+                                     driver=driver)
 
             if not _robot_armed:
                 if frame is None:
