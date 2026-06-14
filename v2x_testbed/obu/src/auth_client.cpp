@@ -347,8 +347,6 @@ bool AuthClient::send_post_auth_message(const Bytes& plaintext,
         return false;
     }
 
-    std::cout << "[AUTH] Post-auth message sent (" << plaintext.size()
-              << " bytes plaintext → " << packet.size() << " bytes on wire)" << std::endl;
     return true;
 }
 

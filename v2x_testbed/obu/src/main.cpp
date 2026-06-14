@@ -228,10 +228,15 @@ int main(int argc, char* argv[]) {
                 "\",\"message\":\"V2X_STATUS_OK\"}";
             Bytes payload(payload_str.begin(), payload_str.end());
 
-            auth.send_post_auth_message(payload, result.sk_enc, result.sk_mac);
-
-            if (is_emergency) {
-                std::cout << "[OBU] 🚑 Emergency priority flag sent" << std::endl;
+            bool ok = auth.send_post_auth_message(payload, result.sk_enc, result.sk_mac);
+            if (ok) {
+                std::cout << "[OBU] Post-auth sent ("
+                          << payload.size() << " bytes plaintext)" << std::endl;
+                if (is_emergency) {
+                    std::cout << "[OBU] 🚑 Emergency priority flag sent" << std::endl;
+                }
+            } else {
+                std::cerr << "[OBU] Post-auth send failed" << std::endl;
             }
 
             // Heartbeat loop: keep sending post-auth so RSU continuously grants priority.
@@ -239,7 +244,10 @@ int main(int argc, char* argv[]) {
             // post_auth_count=60 (ambulance) = send every delta_ts_ms for ~30s then exit.
             for (int h = 1; h < post_auth_count; ++h) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(delta_ts_ms));
-                auth.send_post_auth_message(payload, result.sk_enc, result.sk_mac);
+                if (!auth.send_post_auth_message(payload, result.sk_enc, result.sk_mac)) {
+                    std::cerr << "[OBU] Heartbeat " << h << " failed — aborting session" << std::endl;
+                    break;
+                }
             }
         } else {
             fail_count++;
