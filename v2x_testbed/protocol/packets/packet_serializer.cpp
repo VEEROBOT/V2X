@@ -200,6 +200,8 @@ AuthRequest PacketSerializer::deserialize_auth_request(const Bytes& data) {
     // Read actual signature length, then extract only that many bytes
     uint16_t sig_len = (static_cast<uint16_t>(ptr[0]) << 8) | ptr[1];
     ptr += 2;
+    if (sig_len > crypto_->get_signature_size())
+        sig_len = static_cast<uint16_t>(crypto_->get_signature_size());
     req.sig_obu   = read_bytes(ptr, sig_len);
     // Skip padding
     ptr += (crypto_->get_signature_size() - sig_len);
@@ -220,6 +222,8 @@ AuthResponse PacketSerializer::deserialize_auth_response(const Bytes& data) {
     // Read actual signature length, then extract only that many bytes
     uint16_t sig_len = (static_cast<uint16_t>(ptr[0]) << 8) | ptr[1];
     ptr += 2;
+    if (sig_len > crypto_->get_signature_size())
+        sig_len = static_cast<uint16_t>(crypto_->get_signature_size());
     resp.sig_rsu   = read_bytes(ptr, sig_len);
     ptr += (crypto_->get_signature_size() - sig_len);
 
@@ -243,6 +247,9 @@ PostAuthMessage PacketSerializer::deserialize_post_auth(const Bytes& data) {
     memcpy(&net_len, ptr, 4);
     ptr += 4;
     uint32_t enc_len = ntohl(net_len);
+    size_t available = data.size() - HEADER_SIZE - 4;
+    if (enc_len + 32 > available)
+        enc_len = (available > 32) ? static_cast<uint32_t>(available - 32) : 0;
 
     PostAuthMessage msg;
     msg.encrypted_payload = read_bytes(ptr, enc_len);

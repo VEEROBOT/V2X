@@ -96,6 +96,7 @@ int main(int argc, char* argv[]) {
     int desktop_reg_port     = config.get_int("desktop_reg_port", 8001);
     bool is_emergency        = config.get_bool("is_emergency", false);
     int delta_ts_ms          = config.get_int("delta_ts_ms", 50);
+    int post_auth_count      = config.get_int("post_auth_count", 1);
     std::string provider     = config.get_string("crypto_provider", "placeholder");
     std::string key_dir      = config.get_string("key_directory", "./keys/");
 
@@ -231,6 +232,14 @@ int main(int argc, char* argv[]) {
 
             if (is_emergency) {
                 std::cout << "[OBU] 🚑 Emergency priority flag sent" << std::endl;
+            }
+
+            // Heartbeat loop: keep sending post-auth so RSU continuously grants priority.
+            // post_auth_count=1 (car default) = send once and exit immediately.
+            // post_auth_count=60 (ambulance) = send every delta_ts_ms for ~30s then exit.
+            for (int h = 1; h < post_auth_count; ++h) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delta_ts_ms));
+                auth.send_post_auth_message(payload, result.sk_enc, result.sk_mac);
             }
         } else {
             fail_count++;

@@ -29,6 +29,7 @@ sudo tee "$OBU_CONFIG" > /dev/null << OBUEOF
     "desktop_reg_port": 8001,
     "is_emergency": true,
     "delta_ts_ms": 500,
+    "post_auth_count": 60,
     "crypto_provider": "placeholder",
     "key_directory": "./keys_${MY_HOSTNAME}/"
 }

@@ -135,6 +135,13 @@ void PacketProcessor::handle_auth_request(const Bytes& data,
 
     std::cout << "[PROC] AuthRequest from " << sender_ip << ":" << sender_port << std::endl;
 
+    if (data.size() < serializer_.get_auth_request_size()) {
+        std::cout << "[PROC] AuthRequest too small (" << data.size()
+                  << " bytes, expected " << serializer_.get_auth_request_size()
+                  << "), ignoring" << std::endl;
+        return;
+    }
+
     // Step 7: Deserialize
     AuthRequest req = serializer_.deserialize_auth_request(data);
     int64_t ts_recv = PacketSerializer::now_microseconds();
@@ -304,6 +311,11 @@ void PacketProcessor::handle_kc1(const Bytes& data,
 
     std::cout << "[PROC] KC1 from " << sender_ip << ":" << sender_port << std::endl;
 
+    if (data.size() < HEADER_SIZE + 32) {
+        std::cout << "[PROC] KC1 too small (" << data.size() << " bytes), ignoring" << std::endl;
+        return;
+    }
+
     // Find the session for this sender
     SessionEntry* session = sessions_.find_by_address(sender_ip, sender_port);
     if (!session) {
@@ -382,6 +394,12 @@ void PacketProcessor::handle_post_auth(const Bytes& data,
     Timer timer;
     timer.start("total");
     std::cout << "[PROC] Post-auth message from " << sender_ip << ":" << sender_port << std::endl;
+
+    // HEADER_SIZE + 4 (enc_len field) + 1 (min payload) + 32 (HMAC)
+    if (data.size() < HEADER_SIZE + 4 + 1 + 32) {
+        std::cout << "[PROC] Post-auth too small (" << data.size() << " bytes), ignoring" << std::endl;
+        return;
+    }
 
     SessionEntry* session = sessions_.find_active_by_address(sender_ip, sender_port);
     if (!session) {

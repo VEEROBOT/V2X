@@ -228,6 +228,8 @@ DESKTOP_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_con
 # so every new auth cycle has a unique ip:port key in the RSU session table.
 UDP_LISTEN_PORT=5003
 if [ "$ROLE" = "ambulance" ]; then UDP_LISTEN_PORT=0; fi
+POST_AUTH_COUNT=1
+if [ "$ROLE" = "ambulance" ]; then POST_AUTH_COUNT=60; fi
 cat > "$OBU_DIR/config/obu_local.json" << OBUEOF
 {
     "entity_id": "${ENTITY_ID}",
@@ -239,6 +241,7 @@ cat > "$OBU_DIR/config/obu_local.json" << OBUEOF
     "desktop_reg_port": 8001,
     "is_emergency": ${IS_EMERGENCY},
     "delta_ts_ms": 500,
+    "post_auth_count": ${POST_AUTH_COUNT},
     "crypto_provider": "placeholder",
     "key_directory": "./keys_${MY_HOSTNAME}/"
 }
