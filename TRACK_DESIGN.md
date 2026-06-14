@@ -3,7 +3,7 @@
 > **Space:** 10 × 12 ft (3048 × 3657 mm) oval loop  
 > **AprilTag family:** `DICT_APRILTAG_36H11`  
 > **Tags:** 10 inner (primary) + 8 outer (recovery) = 18 total  
-> **Last updated:** 2026-06-11
+> **Last updated:** 2026-06-14
 
 ---
 
@@ -34,9 +34,9 @@ Direction of travel: **clockwise** (viewed from above).
 
 | Item | Spec | Qty |
 |------|------|-----|
-| White tape (oval boundary) | 25 mm wide | ~8 m |
-| Yellow tape (inner island) | 25 mm wide | ~6 m |
-| Yellow tape (outer boundary) | 25 mm wide | ~10 m |
+| White tape (oval boundary) | 40 mm wide | ~8 m |
+| Yellow tape (inner island) | 40 mm wide | ~6 m |
+| Yellow tape (outer boundary) | 40 mm wide | ~10 m |
 | AprilTag prints (inner) | 10 cm × 10 cm on white card | 10 |
 | AprilTag prints (outer) | 10 cm × 10 cm on white card | 8 |
 
@@ -58,7 +58,7 @@ Direction of travel: **clockwise** (viewed from above).
   [yellow inner island]  ← car moves left onto this during emergency
 ```
 
-- **White oval**: main lane boundary — broken dashes, 25 mm wide
+- **White oval**: main lane boundary — broken dashes, 40 mm wide
 - **Yellow inner island**: left side boundary — continuous strip; car steers onto it during evasion
 - **Yellow outer boundary**: right/outer edge — continuous strip; marks arena limit
 - **Track width**: ~510 mm (white oval to yellow inner island, each side)

@@ -22,7 +22,8 @@
 12. [Git Workflow](#git-workflow)
 13. [Adding a New Robot](#adding-a-new-robot)
 14. [Port Reference](#port-reference)
-15. [Troubleshooting](#troubleshooting)
+15. [Configurable Modes (Advanced)](#configurable-modes-advanced)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -600,6 +601,86 @@ After reboot, the service starts automatically. Run `v2x_run_car` (or `v2x_run_a
 | 9000 | TCP | RSU → Laptop | Audit log stream |
 
 > The ambulance uses `udp_listen_port: 0` (OS assigns a fresh ephemeral port each restart). This prevents RSU session lookup collisions when the ambulance re-authenticates every 2 seconds.
+
+---
+
+## Configurable Modes (Advanced)
+
+Two behaviours that were hardcoded are now selectable in `config.yaml`.
+Both default to the original behaviour — flip one word to enable the new mode.
+
+---
+
+### RECOVERING exit mode
+
+Controls how the car decides it has arced far enough back to the white line after yielding.
+
+**`recovery_exit_mode: timer`** (default)
+Exit after `recovery_duration_s: 3.5` seconds. Simple, always works.
+
+**`recovery_exit_mode: gyro`**
+Exit when the STM32 IMU measures `recovery_target_deg: 30.0` degrees of rotation.
+Timer still fires as a safety net if gyro data is absent or unreliable.
+
+```yaml
+# robot_python/config.yaml — emergency_handler section
+recovery_exit_mode: gyro      # timer | gyro
+recovery_target_deg: 30.0     # degrees of yaw to accumulate before exiting
+gyro_max_rad_s: 4.0           # spike filter — discard |gyro_z| above this (motor EMI)
+gyro_min_samples: 3           # min valid readings before trusting the accumulation
+```
+
+**IMU note:** the IMU (LSM6DSRTR) is mounted inside the aluminium chassis close to the motors.
+Motor switching creates EMI spikes that can reach 10+ rad/s. The spike filter (`gyro_max_rad_s`)
+and minimum-samples guard (`gyro_min_samples`) protect against this. If the gyro data is too
+noisy the mode silently falls back to the timer — it never gets stuck.
+
+**How to test:**
+1. Set `recovery_exit_mode: gyro` in config.yaml
+2. Run `python3 main_car.py`, arm the robot, press **A** (simulate ambulance arrive)
+3. Watch the log — you should see one of:
+   ```
+   RECOVERING → RESUMING: gyro 30.2° reached (47 samples)   ← gyro worked
+   RECOVERING → RESUMING: gyro fallback — timer fired        ← IMU noise, fell back
+   ```
+4. Tune `recovery_target_deg` if the robot exits too early (raise it) or overshoots the white line (lower it).
+
+---
+
+### Dead-reckoning position
+
+Controls how `distance_m` (distance within the current zone) is computed between AprilTag sightings.
+
+**`position_mode: tag_only`** (default)
+`distance_m` only updates when a tag is detected. Frozen between sightings.
+
+**`position_mode: dead_reckoning`**
+`distance_m` is integrated continuously from wheel encoder ticks.
+Formula: `Δticks × (2π × 0.065 / 3600)` — no time dependency, purely event-driven.
+Resets to zero every time an AprilTag is detected (ground truth always wins).
+
+```yaml
+# robot_python/config.yaml — position section
+position_mode: dead_reckoning   # tag_only | dead_reckoning
+ticks_per_rev: 3600             # from STM32 robot_config.h: 900 CPR × 4 (quadrature X4)
+```
+
+**Where 3600 comes from:**
+```
+ENC_RESOLUTION_CPR = 900    (encoder cycles per wheel revolution — through gearbox, calibrated by hand)
+ENCODER_TICKS_REV  = 900 × 4 = 3600   (quadrature X4 mode sees both edges of both channels)
+DISTANCE_PER_TICK  = π × 0.13 / 3600  ≈ 0.1135 mm per tick
+```
+This is defined in `STM32F405RGTx/Core/Inc/config/robot_config.h` and verified by manually
+rotating the wheel one full turn and counting ticks (~±3600 measured).
+
+**How to test:**
+1. Set `position_mode: dead_reckoning` in config.yaml
+2. Run `python3 main_car.py` with `logging.run_log: true`
+3. Drive the robot between two AprilTags and watch `~/v2x_run.csv`:
+   - In `tag_only` mode `distance_m` would stay frozen between tag detections
+   - In `dead_reckoning` mode it should increase steadily, then snap to 0 when the next tag appears
+4. If `distance_m` grows too fast or too slow, recheck `ticks_per_rev` by rotating one wheel by hand and reading `wheel_ticks` from the telemetry log.
 
 ---
 
