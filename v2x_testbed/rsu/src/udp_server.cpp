@@ -43,9 +43,10 @@ void UdpServer::start() {
     fd_ = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd_ < 0) throw std::runtime_error("UDP socket() failed");
 
-    // Allow reuse
+    // Allow reuse and broadcast (needed for car alert to 192.168.x.255)
     int opt = 1;
-    setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR,  &opt, sizeof(opt));
+    setsockopt(fd_, SOL_SOCKET, SO_BROADCAST,  &opt, sizeof(opt));
 
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;

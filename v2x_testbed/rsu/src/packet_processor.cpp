@@ -439,21 +439,22 @@ void PacketProcessor::handle_post_auth(const Bytes& data,
     timer.stop("aes_decrypt");
 
     std::string payload_str(plaintext.begin(), plaintext.end());
-    std::cout << "[PROC] Post-auth decrypted: " << plaintext.size() << " bytes" << std::endl;
-    std::cout << "[PROC] Payload: " << payload_str << std::endl;
 
     // Step 3: Check for emergency flag
     std::string sid_hex = to_hex(session->session_id);
     bool is_emergency = (payload_str.find("\"is_emergency\":true") != std::string::npos);
 
     if (is_emergency) {
-        std::cout << "[PROC] 🚑 EMERGENCY VEHICLE DETECTED — Granting priority" << std::endl;
-        session->is_emergency = true;
-        log_event("EMERGENCY_PRIORITY_GRANTED", to_hex(session->pid_obu, 16), "RSU",
-                  sid_hex,
-                  "{\"payload_size\":" + std::to_string(plaintext.size()) + ",\"emergency\":true}",
-                  timer);
-        // Notify car robot immediately
+        if (!session->is_emergency) {
+            // First emergency heartbeat for this session — log once and print
+            std::cout << "[PROC] 🚑 EMERGENCY VEHICLE DETECTED — Granting priority" << std::endl;
+            session->is_emergency = true;
+            log_event("EMERGENCY_PRIORITY_GRANTED", to_hex(session->pid_obu, 16), "RSU",
+                      sid_hex,
+                      "{\"payload_size\":" + std::to_string(plaintext.size()) + ",\"emergency\":true}",
+                      timer);
+        }
+        // Always notify car — keeps car emergency active even after a car restart
         send_car_alert(true, sid_hex);
     } else {
         log_event("POST_AUTH_RECEIVED", to_hex(session->pid_obu, 16), "RSU",
