@@ -168,7 +168,9 @@ class V2XBridge:
             if not self._spawn_obu_process():
                 break
 
-        if self._running:
+        if self._running and self._role == 'ambulance':
+            # Ambulance only: OBU is the source of emergency, so clear it on exit.
+            # Car role: emergency is managed by the RSU listener, not the OBU.
             logger.warning("OBU stopped. Emergency clears in %.0fs.", self._exit_clear_delay)
             time.sleep(self._exit_clear_delay)
             if self._emergency:
@@ -206,11 +208,13 @@ class V2XBridge:
                 t   = msg.get('type', '')
                 if t == 'EMERGENCY_ACTIVE':
                     sid = msg.get('session_id', '')
-                    logger.warning("RSU ALERT: EMERGENCY ACTIVE (session=%s) from %s",
-                                   sid[:8], addr[0])
+                    if not self._emergency:
+                        logger.warning("RSU ALERT: EMERGENCY ACTIVE (session=%s) from %s",
+                                       sid[:8], addr[0])
                     self._emergency = True
                 elif t == 'EMERGENCY_CLEARED':
-                    logger.info("RSU ALERT: Emergency cleared from %s", addr[0])
+                    if self._emergency:
+                        logger.info("RSU ALERT: Emergency cleared from %s", addr[0])
                     self._emergency = False
                 else:
                     logger.warning("RSU listener: unknown type '%s'", t)
