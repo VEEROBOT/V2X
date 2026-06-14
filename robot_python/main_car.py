@@ -173,15 +173,30 @@ def load_config(path: str, role: str = '') -> dict:
     return cfg
 
 
+def _pi_temp() -> str:
+    """Read Pi CPU temperature from sysfs. Returns e.g. '52.3°C' or '---'."""
+    try:
+        raw = open('/sys/class/thermal/thermal_zone0/temp').read().strip()
+        return f"{int(raw) / 1000:.1f}C"
+    except Exception:
+        return '---'
+
+
 def _push_stream(streamer, full_frame, roi_panels, crop_y,
                  estimator, handler, bridge, broadcaster,
-                 joystick, armed, vx, wz):
+                 joystick, armed, vx, wz, driver=None):
     import cv2, numpy as np
+    from datetime import datetime
     # Top row: full camera frame (scaled 2× wider) with crop boundary
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
     cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
     cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
+
+    # Timestamp top-right corner
+    ts = datetime.now().strftime('%H:%M:%S')
+    cv2.putText(top, ts, (570, 14),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
 
     # AprilTag overlay (x-coords ×2 because top panel is 2× wider than source)
     corners, ids = estimator.get_last_detections()
@@ -218,7 +233,7 @@ def _push_stream(streamer, full_frame, roi_panels, crop_y,
     cv2.putText(bar1, "  ".join(row1), (4, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, col1, 1)
 
-    # ── Status bar — row 2: arm + mode + V2X ─────────────────────────────
+    # ── Status bar — row 2: arm + mode + V2X + battery + Pi temp ─────────
     bar2 = np.zeros((22, 640, 3), np.uint8)
     arm_col = (0, 220, 50) if armed else (0, 80, 220)
     v2x_col = (0, 50, 220) if emg else (120, 120, 120)
@@ -229,6 +244,17 @@ def _push_stream(streamer, full_frame, roi_panels, crop_y,
     v2x_txt = "V2X:EMERGENCY" if emg else ("V2X:ACTIVE" if bridge.is_emergency() else "V2X:STANDBY")
     cv2.putText(bar2, v2x_txt, (200, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, v2x_col, 1)
+
+    # Battery from STM32 telemetry
+    telem = driver.get_telemetry() if driver else None
+    batt_txt = f"BAT:{telem['battery_v']:.1f}V" if telem else "BAT:---"
+    cv2.putText(bar2, batt_txt, (370, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (80, 200, 255), 1)
+
+    # Pi CPU temperature
+    temp_txt = f"PI:{_pi_temp()}"
+    cv2.putText(bar2, temp_txt, (480, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (80, 200, 255), 1)
 
     streamer.push_frame(np.vstack([top, mid, bar1, bar2]))
 
@@ -447,7 +473,8 @@ def main():
                     panels = follower.get_roi_panels()
                     _push_stream(streamer, frame, panels, _crop_y,
                                  estimator, handler, bridge, broadcaster,
-                                 joystick, _robot_armed, _stream_vx, _stream_wz)
+                                 joystick, _robot_armed, _stream_vx, _stream_wz,
+                                 driver=driver)
 
             if not _robot_armed:
                 if frame is None:
