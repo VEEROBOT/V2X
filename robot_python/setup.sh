@@ -181,8 +181,13 @@ else
     echo "  Already clean."
 fi
 
-# ── 9. dialout group + UART alias ───────────────────────────────────────────
-echo "[9/11] Adding $REAL_USER to dialout group..."
+# ── 9. Timezone ──────────────────────────────────────────────────────────────
+echo "[9/11] Setting timezone to Asia/Kolkata..."
+timedatectl set-timezone Asia/Kolkata
+echo "  Timezone: $(timedatectl show --property=Timezone --value)"
+
+# ── 9b. dialout group + UART alias ───────────────────────────────────────────
+echo "[9b] Adding $REAL_USER to dialout group..."
 usermod -a -G dialout "$REAL_USER"
 # Create /dev/ttyRobot pointing to the GPIO header UART regardless of Pi model.
 # RPi 5: GPIO UART = ttyAMA10 (ttyAMA0 is an internal RP1 UART — wrong device)
