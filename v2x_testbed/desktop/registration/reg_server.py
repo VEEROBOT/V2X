@@ -175,7 +175,9 @@ class RegistrationServer:
 
             # Step 6: Record in database
             ip_str = client_addr[0]
-            is_emergency = (entity_id_str == "OBU2")  # OBU2 is the ambulance
+            # Detect ambulance/emergency entities by id pattern
+            eid_upper = entity_id_str.upper()
+            is_emergency = any(kw in eid_upper for kw in ("EMGY", "AMBULANCE", "AMB"))
             self.db.register_entity(
                 entity_id=entity_id_str,
                 ip_address=ip_str,

@@ -117,6 +117,7 @@ class EmergencyHandler:
         # Holding timers
         self._passed_stamp = None
         self._clear_stamp  = None
+        self._last_pos_log_t: float = 0.0   # rate-limit "waiting for position fix" log
 
     # ── Input setters ────────────────────────────────────────────────────────
     def update_own_position(self, pos: Optional[Dict]):
@@ -377,7 +378,10 @@ class EmergencyHandler:
         if self._force_yield and not self._position_known():
             return True   # solo test: A button pressed, no ambulance broadcasting
         if not self._position_known():
-            logger.info("Emergency active — waiting for position fix before yielding")
+            now = time.monotonic()
+            if now - self._last_pos_log_t >= 5.0:
+                logger.info("Emergency active — waiting for position fix before yielding")
+                self._last_pos_log_t = now
             return False
         behind = self._is_amb_behind()
         gap    = self._amb_gap()
