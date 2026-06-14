@@ -198,14 +198,14 @@ class Joystick:
             with self._lock:
                 js = self._js
 
+            pygame.event.pump()
+
             if js is None:
                 _no_js_ticks += 1
                 if _no_js_ticks % 250 == 0:   # every 5 s at 50 Hz
                     self._try_connect()
                 time.sleep(dt)
                 continue
-
-            pygame.event.pump()
 
             try:
                 n_buttons   = self._js.get_numbuttons()
