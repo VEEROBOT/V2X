@@ -2,8 +2,7 @@
 """
 V2X Ambulance Robot — pure Python main loop.
 
-Simpler than the car: no emergency handler — the ambulance drives through.
-Runs faster (linear_speed = 0.28 m/s hard-coded here, overrides config).
+No emergency handler — the ambulance drives through while broadcasting V2X.
 
 Usage:
   python3 main_ambulance.py
@@ -13,27 +12,37 @@ Usage:
                             --obu-config  /home/pi/v2x/obu/config/obu2_config.json \\
                             --car-ip 192.168.1.x
 
-Trigger emergency broadcast (manual mode, from another terminal):
+Joystick:
+  Hold LB (deadman)  → manual drive
+  Start              → arm / disarm
+  A button           → simulate V2X emergency ON  (test without OBU)
+  B button           → simulate V2X emergency OFF
+
+Trigger emergency broadcast (manual, from another terminal):
   python3 control_socket.py --port 5011 emergency_on
   python3 control_socket.py --port 5011 emergency_off
 """
 
 import argparse
+import csv
 import logging
+import os
+import signal
 import sys
+import threading
 import time
 
 import yaml
 
+from algorithms           import create_follower
 from camera               import Camera
+from control_socket       import ControlSocket
 from joystick             import Joystick
-from robot_driver         import RobotDriver
-from lane_follower        import LaneFollower
 from position             import PositionEstimator
 from position_broadcaster import PositionBroadcaster
-from v2x_bridge           import V2XBridge
-from control_socket       import ControlSocket
+from robot_driver         import RobotDriver
 from stream_server        import StreamServer
+from v2x_bridge           import V2XBridge
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +50,79 @@ logging.basicConfig(
     datefmt='%H:%M:%S',
 )
 logger = logging.getLogger('ambulance')
+
+_LOG_PATH = os.path.expanduser('~/v2x_amb_run.csv')
+_LOG_HZ   = 10
+_LOG_COLS = [
+    'time_s', 'vx', 'wz', 'zone', 'mode',
+    'white_err_px', 'ly_px', 'n_strips',
+    'tags_seen', 'emergency',
+]
+
+
+class RunLogger:
+    def __init__(self, enabled: bool = True):
+        self._enabled = enabled
+        self._file    = None
+        self._writer  = None
+        self._t_start = 0.0
+        self._t_last  = 0.0
+        self._armed   = False
+
+    def arm(self):
+        if not self._enabled:
+            return
+        self._close()
+        self._file   = open(_LOG_PATH, 'w', newline='', buffering=1)
+        self._writer = csv.writer(self._file)
+        self._writer.writerow(_LOG_COLS)
+        self._t_start = time.monotonic()
+        self._t_last  = 0.0
+        self._armed   = True
+        logger.info("Run log started → %s", _LOG_PATH)
+
+    def disarm(self):
+        self._armed = False
+        if not self._enabled:
+            return
+        self._close()
+        logger.info("Run log closed → %s", _LOG_PATH)
+
+    def log(self, vx: float, wz: float, zone: int,
+            follower, estimator, emergency: bool = False):
+        if not self._armed or self._writer is None:
+            return
+        now = time.monotonic()
+        if now - self._t_last < 1.0 / _LOG_HZ:
+            return
+        self._t_last = now
+
+        info = follower.get_debug_info()
+        _, tag_ids = estimator.get_last_detections()
+        tags_str   = ';'.join(str(i) for i in tag_ids) if tag_ids else ''
+
+        self._writer.writerow([
+            round(now - self._t_start, 2),
+            round(vx, 3),
+            round(wz, 3),
+            zone,
+            info['mode'],
+            info['white_err']    if info['white_err']    is not None else '',
+            info.get('ly_px')    if info.get('ly_px')    is not None else '',
+            info.get('n_strips') if info.get('n_strips') is not None else '',
+            tags_str,
+            1 if emergency else 0,
+        ])
+
+    def _close(self):
+        if self._file:
+            try:
+                self._file.close()
+            except Exception:
+                pass
+            self._file   = None
+            self._writer = None
+
 
 def _deep_merge(base: dict, override: dict):
     for k, v in override.items():
@@ -60,14 +142,13 @@ def load_config(path: str, role: str = '') -> dict:
 
 
 def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
-                     estimator, bridge, joystick, vx, wz):
+                     estimator, bridge, joystick, armed, vx, wz):
     import cv2, numpy as np
     top = cv2.resize(full_frame, (640, full_frame.shape[0]))
     cv2.line(top, (0, crop_y), (640, crop_y), (0, 215, 255), 1)
     cv2.putText(top, "crop", (4, max(crop_y - 3, 8)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 215, 255), 1)
 
-    # AprilTag overlay (x-coords ×2 because top panel is 2× wider than source)
     corners, ids = estimator.get_last_detections()
     for pts, tag_id in zip(corners, ids):
         scaled = (pts[0] * [2, 1]).astype(np.int32)
@@ -82,27 +163,30 @@ def _push_stream_amb(streamer, full_frame, roi_panels, crop_y,
     else:
         mid = np.zeros((full_frame.shape[0] - crop_y, 640, 3), np.uint8)
 
-    # ── Status bar — row 1: position + speed ─────────────────────────────
-    pos  = estimator.get_position()
-    zone = pos['zone'] if pos else -1
-    off  = pos.get('off_track', False) if pos else False
-    emg  = bridge.is_emergency()
-    mode = 'MANUAL' if joystick.is_manual() else 'AUTO'
+    pos     = estimator.get_position()
+    zone    = pos['zone'] if pos else -1
+    off     = pos.get('off_track', False) if pos else False
+    emg     = bridge.is_emergency()
+    mode    = 'MANUAL' if joystick.is_manual() else 'AUTO'
+    arm_lbl = 'ARMED' if armed else 'DISARMED'
 
     bar1 = np.zeros((22, 640, 3), np.uint8)
     col1 = (0, 50, 220) if emg else (0, 200, 200)
     row1 = [f"AMB zone={zone}", f"vx={vx:.2f}", f"wz={wz:+.2f}", "AMBULANCE"]
-    if off: row1.append("OFF-TRACK")
+    if off:
+        row1.append("OFF-TRACK")
     cv2.putText(bar1, "  ".join(row1), (4, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, col1, 1)
 
-    # ── Status bar — row 2: mode + V2X emergency state ───────────────────
     bar2 = np.zeros((22, 640, 3), np.uint8)
-    cv2.putText(bar2, mode, (4, 15),
+    arm_col = (0, 220, 50) if armed else (0, 80, 220)
+    cv2.putText(bar2, arm_lbl, (4, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, arm_col, 1)
+    cv2.putText(bar2, mode, (110, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 215, 255), 1)
     emg_txt = "V2X:BROADCASTING EMERGENCY" if emg else "V2X:STANDBY"
     emg_col = (0, 50, 220) if emg else (120, 120, 120)
-    cv2.putText(bar2, emg_txt, (110, 15),
+    cv2.putText(bar2, emg_txt, (200, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, emg_col, 1)
 
     streamer.push_frame(np.vstack([top, mid, bar1, bar2]))
@@ -122,7 +206,7 @@ def main():
 
     cfg = load_config(args.config, 'ambulance')
 
-    # ── Robot driver ─────────────────────────────────────────────────────
+    # ── Robot driver ──────────────────────────────────────────────────────────
     rc = cfg['robot']
     sc = cfg['serial']
     driver = RobotDriver(
@@ -132,12 +216,12 @@ def main():
         track_width=rc['track_width_m'],
         max_wheel_speed=rc['max_wheel_speed_rad_s'],
         cmd_timeout=rc['cmd_vel_timeout_s'],
+        allow_wheel_reversal=rc.get('allow_wheel_reversal', False),
     )
     driver.start()
     time.sleep(1.0)
-    driver.arm()
 
-    # ── Camera ────────────────────────────────────────────────────────────
+    # ── Camera ────────────────────────────────────────────────────────────────
     cc = cfg['camera']
     cam = Camera(
         device=cc['device'],
@@ -145,41 +229,37 @@ def main():
         height=cc['height'],
         use_picamera2=cc.get('use_picamera2', True),
     )
-    if not cam.start():
-        logger.error("Camera failed to open — exiting")
-        driver.stop()
-        sys.exit(1)
+    cam_ok = cam.start()
+    if not cam_ok:
+        logger.warning("Camera not available — lane following disabled, V2X running")
 
-    # ── Joystick ──────────────────────────────────────────────────────────
+    # ── Joystick ──────────────────────────────────────────────────────────────
     jc = cfg.get('joystick', {})
     joystick = Joystick(
         device_index=jc.get('device_index', 0),
-        deadman_button=jc.get('deadman_button', 5),
+        deadman_button=jc.get('deadman_button', 4),
+        turbo_button=jc.get('turbo_button', 5),
+        arm_button=jc.get('arm_button', 7),
+        amb_arrive_button=jc.get('amb_arrive_button', 0),
+        amb_depart_button=jc.get('amb_depart_button', 1),
+        train_button=jc.get('train_button', 2),
         axis_throttle=jc.get('axis_throttle', 1),
         axis_steering=jc.get('axis_steering', 3),
         max_speed=jc.get('max_speed', 0.4),
+        turbo_speed=jc.get('turbo_speed', 0.8),
         max_steering=jc.get('max_steering', 1.5),
         deadzone=jc.get('deadzone', 0.10),
+        accel_rate=jc.get('accel_rate', 2.0),
+        decel_rate=jc.get('decel_rate', 4.0),
     )
     joystick.start()
 
-    # ── Lane follower ─────────────────────────────────────────────────────
+    # ── Lane follower ─────────────────────────────────────────────────────────
     lc = cfg['lane_follower']
-    follower = LaneFollower(
-        linear_speed=lc['linear_speed'],
-        max_angular_speed=lc['max_angular_speed'],
-        crop_top_ratio=lc['crop_top_ratio'],
-        min_contour_area=lc['min_contour_area'],
-        kp=lc['kp'], ki=lc['ki'], kd=lc['kd'],
-        lane_offset_px=0,   # ambulance follows white centre line directly
-        white_hsv_low =(lc['white_h_low'],  lc['white_s_low'],  lc['white_v_low']),
-        white_hsv_high=(lc['white_h_high'], lc['white_s_high'], lc['white_v_high']),
-        yellow_hsv_low =(lc['yellow_h_low'],  lc['yellow_s_low'],  lc['yellow_v_low']),
-        yellow_hsv_high=(lc['yellow_h_high'], lc['yellow_s_high'], lc['yellow_v_high']),
-        debug=args.debug_image or lc.get('debug_image', False),
-    )
+    follower = create_follower(lc, debug=args.debug_image or lc.get('debug_image', False))
+    logger.info("Lane follower algorithm: %s", lc.get('algorithm', 'pure_pursuit'))
 
-    # ── Position estimator + broadcaster ─────────────────────────────────
+    # ── Position estimator + broadcaster ─────────────────────────────────────
     pc = cfg['position']
     estimator = PositionEstimator(
         n_inner_tags=pc['n_inner_tags'],
@@ -201,7 +281,7 @@ def main():
     )
     broadcaster.start()
 
-    # ── V2X bridge ────────────────────────────────────────────────────────
+    # ── V2X bridge ────────────────────────────────────────────────────────────
     vc = cfg['v2x_bridge']
     bridge = V2XBridge(
         role='ambulance',
@@ -214,14 +294,14 @@ def main():
     )
     bridge.start()
 
-    # ── Vision stream (desktop browser) ──────────────────────────────────
-    sc = cfg.get('stream', {})
+    # ── Vision stream (desktop browser) ──────────────────────────────────────
+    stc = cfg.get('stream', {})
     streamer = None
-    if sc.get('enabled', False):
-        streamer = StreamServer(port=sc.get('port', 5005))
+    if stc.get('enabled', False):
+        streamer = StreamServer(port=stc.get('port', 5005))
         streamer.start()
 
-    # ── Control socket ────────────────────────────────────────────────────
+    # ── Control socket ────────────────────────────────────────────────────────
     ctrl = ControlSocket(port=cfg['control']['port'])
     ctrl.register('emergency_on',  lambda: bridge.set_emergency(True))
     ctrl.register('emergency_off', lambda: bridge.set_emergency(False))
@@ -237,48 +317,103 @@ def main():
     logger.info("║  Lane following  : ACTIVE  (%.2f m/s)                 ║",
                 lc['linear_speed'])
     logger.info("║  Joystick        : %s",
-                "CONNECTED (hold btn%d to drive)" % jc.get('deadman_button', 5)
+                "CONNECTED (hold btn%d to drive)" % jc.get('deadman_button', 4)
                 if joystick.connected() else "not found — autonomous only          ║")
-    logger.info("║  V2X broadcast   : STANDBY (manual mode)             ║")
+    logger.info("║  V2X broadcast   : STANDBY (A=ON  B=OFF)             ║")
     logger.info("╚══════════════════════════════════════════════════════╝")
     logger.info("")
 
+    def _sigterm(*_):
+        threading.Timer(5.0, lambda: os.kill(os.getpid(), signal.SIGKILL)).start()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _sigterm)
+
+    _robot_armed   = False
+    _stream_vx     = 0.0
+    _stream_wz     = 0.0
     _last_stream_t = 0.0
     _crop_y        = int(lc['crop_top_ratio'] * cc['height'])
+    _run_log       = RunLogger(enabled=cfg.get('logging', {}).get('run_log', True))
+    own_pos        = None
 
     try:
         while True:
+            # ── Joystick buttons ──────────────────────────────────────────────
+            # A button: start emergency broadcast (for testing without OBU)
+            if joystick.get_amb_arrive():
+                bridge.set_emergency(True)
+                logger.info("*** SIM: emergency BROADCAST ON (A button) ***")
+            # B button: stop emergency broadcast
+            if joystick.get_amb_depart():
+                bridge.set_emergency(False)
+                logger.info("*** SIM: emergency BROADCAST OFF (B button) ***")
+            # X button: toggle training recording (recorded_path algorithm)
+            if joystick.get_train_toggle() and hasattr(follower, 'toggle_training'):
+                follower.toggle_training()
+            # Start button: arm / disarm
+            if joystick.get_arm_press():
+                _robot_armed = not _robot_armed
+                if _robot_armed:
+                    driver.arm()
+                    _run_log.arm()
+                    logger.info("*** ARMED (Start button) ***")
+                else:
+                    driver.set_velocity(0.0, 0.0)
+                    driver.disarm()
+                    _run_log.disarm()
+                    logger.info("*** DISARMED (Start button) ***")
+
+            # ── Camera grab + stream (always, regardless of arm state) ────────
+            # Keeps picamera2 buffer drained continuously — prevents flickering.
             frame = cam.get_frame()
-            if frame is None:
-                time.sleep(0.05)
-                continue
 
-            # Position update + broadcast
-            estimator.process(frame)
-            own_pos = estimator.get_position()
-            broadcaster.set_own_position(own_pos)
-
-            # ── Velocity decision ─────────────────────────────────────────
-            js_cmd = joystick.get_command()
-            if js_cmd is not None:
-                vx, wz = js_cmd
-            else:
-                vx, wz = follower.process(frame)
-
-            driver.set_velocity(vx, wz)
-
-            # Push ~10 fps to desktop browser
-            if streamer:
+            if streamer and frame is not None:
                 now = time.monotonic()
                 if now - _last_stream_t >= 0.04:
                     _last_stream_t = now
                     panels = follower.get_roi_panels()
                     _push_stream_amb(streamer, frame, panels, _crop_y,
-                                     estimator, bridge, joystick, vx, wz)
+                                     estimator, bridge, joystick,
+                                     _robot_armed, _stream_vx, _stream_wz)
+
+            if not _robot_armed:
+                if frame is None:
+                    time.sleep(0.02)
+                continue
+
+            # ── Position update (only when armed) ─────────────────────────────
+            if frame is not None:
+                estimator.process(frame)
+                own_pos = estimator.get_position()
+                broadcaster.set_own_position(own_pos)
+
+            zone = own_pos['zone'] if own_pos else -1
+            follower.set_zone(zone)
+
+            # ── Velocity decision ─────────────────────────────────────────────
+            js_cmd = joystick.get_command()
+            if js_cmd is not None:
+                vx, wz = js_cmd
+                if hasattr(follower, 'record') and follower.is_recording():
+                    follower.record(vx, wz, zone)
+            elif frame is not None:
+                vx, wz = follower.process(frame)
+            else:
+                vx, wz = 0.0, 0.0
+
+            driver.set_velocity(vx, wz)
+            _stream_vx, _stream_wz = vx, wz
+
+            _run_log.log(vx, wz, zone, follower, estimator,
+                         emergency=bridge.is_emergency())
+
+            if frame is None:
+                time.sleep(0.02)
 
     except KeyboardInterrupt:
         logger.info("Shutting down…")
     finally:
+        _run_log.disarm()
         driver.set_velocity(0.0, 0.0)
         time.sleep(0.1)
         driver.disarm()
