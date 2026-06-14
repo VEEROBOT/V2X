@@ -149,11 +149,12 @@ position:
 
   # ── Position mode ────────────────────────────────────────────────────────────
   # tag_only       : distance_m updates only when an AprilTag is detected (default, safe)
-  # dead_reckoning : distance_m is integrated continuously from wheel RPM between tag
-  #                  sightings. Zone stays as last seen tag. Resets to 0 on every
-  #                  new tag detection — ground truth always wins.
-  #                  Uses robot.wheel_radius_m from the robot section above.
+  # dead_reckoning : distance_m is integrated continuously from wheel encoder ticks
+  #                  between tag sightings. Zone stays as last seen tag. Resets to 0
+  #                  on every new tag detection — ground truth always wins.
+  #                  Uses ticks_per_rev and wheel_radius_m below.
   position_mode: tag_only
+  ticks_per_rev: 3600        # from STM32 robot_config.h: 900 CPR × 4 (quadrature X4)
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────

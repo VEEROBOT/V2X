@@ -45,12 +45,15 @@ class PositionEstimator:
                  detect_every_n: int = 3,
                  debug: bool = False,
                  position_mode: str = 'tag_only',
-                 wheel_radius_m: float = 0.065):
+                 wheel_radius_m: float = 0.065,
+                 ticks_per_rev: int = 3600):
         """
         position_mode: 'tag_only'       — distance_m from tag pixel width (default)
-                       'dead_reckoning' — distance_m integrated from wheel RPM;
+                       'dead_reckoning' — distance_m from wheel encoder ticks;
                                          reset to 0 on every AprilTag detection
-        wheel_radius_m: physical wheel radius — only used in dead_reckoning mode
+        wheel_radius_m: physical wheel radius (m)
+        ticks_per_rev:  encoder ticks per full wheel revolution
+                        STM32 value: 900 CPR × 4 (quadrature X4) = 3600
         """
         self._n_inner    = n_inner_tags
         self._n_outer    = n_outer_tags
@@ -60,8 +63,9 @@ class PositionEstimator:
         self._focal      = float(focal_px)
         self._every_n    = detect_every_n
         self._debug      = debug
-        self._pos_mode   = position_mode
-        self._wheel_radius = wheel_radius_m
+        self._pos_mode      = position_mode
+        # distance_per_tick (m): 2π × r / ticks_per_rev  (same formula as STM32's DISTANCE_PER_TICK)
+        self._dist_per_tick = (2.0 * math.pi * wheel_radius_m) / ticks_per_rev
 
         self._frame_cnt      = 0
         self._last_zone      = -1
@@ -72,7 +76,7 @@ class PositionEstimator:
 
         # Dead-reckoning state (only used when position_mode == 'dead_reckoning')
         self._dist_since_tag = 0.0
-        self._last_odom_t    = 0.0
+        self._last_ticks     = None  # list[4] of last known cumulative tick counts
 
         # AprilTag 36h11 — compatible with OpenCV 4.5.x and 4.7+
         self._aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
@@ -124,7 +128,8 @@ class PositionEstimator:
             self._last_dist = dist_m
             self._off_track = False
             if self._pos_mode == 'dead_reckoning':
-                self._dist_since_tag = 0.0   # ground truth resets odometry
+                self._dist_since_tag = 0.0
+                self._last_ticks     = None   # force baseline re-capture at next update
             logger.debug("Inner tag id=%d  zone=%d  dist≈%.2fm", raw_id, raw_id, dist_m)
         elif raw_id < self._n_inner + self._n_outer:
             # Outer reference tag — robot has drifted off the inner oval
@@ -144,22 +149,27 @@ class PositionEstimator:
 
     def update_odometry(self, telem: dict, now: float) -> None:
         """
-        Accumulate forward distance from wheel RPM since the last AprilTag.
+        Accumulate forward distance from wheel encoder ticks since the last AprilTag.
         Call at telemetry rate (~10 Hz). No-op in tag_only mode.
-        Uses avg of four wheel RPMs — works even if one wheel slips.
+
+        Uses cumulative tick counts (wheel_ticks[4] from STM32) — Δticks × dist_per_tick.
+        No dt involved: tick counting is purely event-driven, not time-dependent.
+        Polarity is already applied by the STM32 (positive = forward on all wheels).
         """
         if self._pos_mode != 'dead_reckoning':
             return
         if self._last_zone < 0:
             return   # no reference yet — don't accumulate blind
-        dt = now - self._last_odom_t
-        self._last_odom_t = now
-        if not (0 < dt < 0.5):
-            return   # reject first call (huge dt) and stale gaps
-        rpms = telem.get('wheel_rpm', [0.0, 0.0, 0.0, 0.0])
-        avg_rpm = sum(abs(r) for r in rpms) / 4.0
-        dist = avg_rpm * (2.0 * math.pi * self._wheel_radius / 60.0) * dt
-        # Cap at 2 × spacing — don't trust odometry beyond two tags of travel
+        curr_ticks = telem.get('wheel_ticks')
+        if not curr_ticks or len(curr_ticks) < 4:
+            return
+        if self._last_ticks is None:
+            self._last_ticks = list(curr_ticks)   # first call — just record baseline
+            return
+        avg_delta = sum(abs(c - p) for c, p in zip(curr_ticks, self._last_ticks)) / 4.0
+        self._last_ticks = list(curr_ticks)
+        dist = avg_delta * self._dist_per_tick
+        # Cap at 2 × tag_spacing — don't trust odometry beyond two tags of travel
         self._dist_since_tag = min(self._dist_since_tag + dist, self._spacing * 2.0)
 
     def get_position(self) -> Optional[Dict]:

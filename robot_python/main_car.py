@@ -352,6 +352,7 @@ def main():
         debug          = args.debug_position or pc.get('debug_image', False),
         position_mode  = pc.get('position_mode', 'tag_only'),
         wheel_radius_m = cfg['robot']['wheel_radius_m'],
+        ticks_per_rev  = pc.get('ticks_per_rev', 3600),
     )
 
     pbc      = cfg['position_broadcaster']
