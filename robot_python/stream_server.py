@@ -49,12 +49,11 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       letter-spacing:0.08em; flex-shrink:0;
     }}
     #view {{
-      flex:1; min-height:0; display:flex;
-      align-items:center; justify-content:center; background:#000;
+      flex:1; min-height:0; background:#000;
     }}
     #view img {{
-      max-width:100%; max-height:100%;
-      object-fit:contain; image-rendering:pixelated;
+      width:100%; height:100%;
+      object-fit:contain; image-rendering:pixelated; display:block;
     }}
     #legend {{
       padding:3px 10px; font-size:0.68em; color:#555; flex-shrink:0;
