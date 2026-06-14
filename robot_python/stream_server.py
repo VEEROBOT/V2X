@@ -39,22 +39,35 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <title>{name} | Robot Vision</title>
   <style>
-    body {{ background:#111; margin:0; display:flex; flex-direction:column;
-           align-items:center; justify-content:center; min-height:100vh; color:#aaa;
-           font-family:monospace; }}
-    h2   {{ color:#ccc; margin:8px 0 2px; font-size:0.95em; letter-spacing:0.1em; }}
-    img  {{ max-width:100%; image-rendering:pixelated; border:1px solid #333; }}
-    p    {{ font-size:0.75em; margin:4px 0; }}
+    * {{ box-sizing:border-box; margin:0; padding:0; }}
+    body {{
+      background:#111; color:#888; font-family:monospace;
+      display:flex; flex-direction:column; height:100vh; overflow:hidden;
+    }}
+    #header {{
+      padding:4px 10px; font-size:0.82em; color:#bbb;
+      letter-spacing:0.08em; flex-shrink:0;
+    }}
+    #view {{
+      flex:1; min-height:0; display:flex;
+      align-items:center; justify-content:center; background:#000;
+    }}
+    #view img {{
+      max-width:100%; max-height:100%;
+      object-fit:contain; image-rendering:pixelated;
+    }}
+    #legend {{
+      padding:3px 10px; font-size:0.68em; color:#555; flex-shrink:0;
+    }}
   </style>
 </head>
 <body>
-  <h2>{name}</h2>
-  <img src="/stream" />
-  <p>Green line = frame centre &nbsp;|&nbsp;
-     Orange line = lane target &nbsp;|&nbsp;
-     Red dot = detected centroid</p>
-  <p>HSV mask: <span style="color:#fff">white</span> pixels &nbsp;|&nbsp;
-     <span style="color:#ff0">yellow</span> pixels</p>
+  <div id="header">{name}</div>
+  <div id="view"><img src="/stream" /></div>
+  <div id="legend">
+    Green = frame centre &nbsp;|&nbsp; Orange = lane target &nbsp;|&nbsp;
+    Red dot = centroid &nbsp;|&nbsp; HSV: white + yellow mask
+  </div>
 </body>
 </html>"""
 
