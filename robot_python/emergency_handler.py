@@ -566,9 +566,20 @@ class EmergencyHandler:
                             self._outer_max_away)
             return base_vx, -toward_outer * turn_away, False
 
-        # (5) Yellow sitting comfortably on the evasion side → drive straight
-        #     (parallel follow).  We deliberately do NOT chase a boundary that
-        #     curves away — drifting slightly inward is safe; crossing is not.
+        # (5) Yellow on the evasion side.  If it has drifted out toward the
+        #     evasion-side EDGE of the frame (about to leave view), apply a GENTLE
+        #     turn TOWARD the boundary to pull it back — this is what makes the
+        #     robot actually FOLLOW the yellow line instead of slowly drifting
+        #     inward, losing it, and wandering off to the inner island.  Safe:
+        #     yellow here is well past centre on the evasion side, and every
+        #     dangerous case (boundary_near / crossed / near-centre) is
+        #     hard-guarded above and re-checked every frame, so a toward-turn can
+        #     never carry the robot across the line.
+        if e_away < -self._outer_est_tol:
+            turn_toward = min(self._outer_follow_kp * (-e_away - self._outer_est_tol),
+                              self._outer_max_away * 0.6)   # gentler toward than away
+            return base_vx, toward_outer * turn_toward, True
+        # Comfortably on target → drive straight (parallel follow).
         return base_vx, 0.0, True
 
     def _enter(self, state: str, now: float):

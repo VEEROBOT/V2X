@@ -402,7 +402,7 @@ joystick:
   train_button:       2          # press X to start/stop training recording
 
   # --- Speed limits ---
-  max_speed:    0.30             # m/s — full stick forward (normal)
+  max_speed:    0.22             # m/s — full stick forward (normal); turbo for faster
   turbo_speed:  0.60             # m/s — full stick forward in turbo mode
   max_steering: 1.20             # rad/s — full stick sideways
 
@@ -423,7 +423,8 @@ car:
   lane_follower:
     linear_speed: 0.08     # keep slow — more turning authority at lower speed
     kpp: 20.0              # car pure-pursuit steering gain
-    lookahead_frac: 0.38   # fraction of ROI height used as lookahead
+    lookahead_frac: 0.34   # slightly closer than 0.38 → starts the curve a touch
+                            # earlier to curb overshoot, without the 0.28 oscillation
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
