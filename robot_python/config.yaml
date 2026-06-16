@@ -344,9 +344,10 @@ control:
 # main_car.py loads the [car] section; main_ambulance.py loads the [ambulance] section.
 car:
   lane_follower:
-    linear_speed: 0.08     # yesterday's working speed — 0.09+ causes line loss on curves
-    kpp: 22.0              # yesterday's working gain — inherits base value
-    lookahead_frac: 0.45   # yesterday's working lookahead — smoother curve anticipation
+    linear_speed: 0.08     # keep slow — more turning authority at lower speed
+    kpp: 28.0              # was 22.0 — stronger curve response (robot was going wide before turning)
+    lookahead_frac: 0.30   # was 0.45 — shorter lookahead starts the turn earlier on curves;
+                            # longer lookahead smooths out curves, causing the robot to undershoot
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
