@@ -176,7 +176,7 @@ lane_follower:
   white_h_high: 180    # keep 180 — white has no hue, accept all colours
   white_s_low:   0     # keep 0 — white is fully desaturated (S near zero)
   white_s_high:  70    # max saturation to count as white — lower if coloured floor leaks in (try 50)
-  white_v_low:  150    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
+  white_v_low:  165    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
   white_v_high: 255    # keep 255 — always accept the brightest whites
 
   # Yellow boundary tape (40 mm, inner island + outer boundary)
@@ -341,7 +341,7 @@ car:
 
 ambulance:
   lane_follower:
-    linear_speed: 0.18     # ambulance drives faster so it can catch and overtake the car
+    linear_speed: 0.10     # ambulance line-follow speed — 0.18 was too fast for detection; tune up once stable
   v2x_bridge:
     obu_loop_count: 0      # 0 = re-authenticate continuously — keeps ambulance connected to RSU at all times
   control:
