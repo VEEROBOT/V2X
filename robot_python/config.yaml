@@ -221,13 +221,13 @@ position:
   #                  between tag sightings. Zone stays as last seen tag. Resets to 0
   #                  on every new tag detection — ground truth always wins.
   #                  Uses ticks_per_rev and wheel_radius_m below.
-  position_mode: tag_only
+  position_mode: dead_reckoning
   ticks_per_rev: 3600        # from STM32 robot_config.h: 900 CPR × 4 (quadrature X4)
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
-  run_log: true                  # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
+  run_log: false                  # set false to disable ~/v2x_run.csv (saves disk I/O on long runs)
 
 
 # ── Vision Stream (browser) ───────────────────────────────────────────────────
@@ -308,7 +308,7 @@ emergency_handler:
   #         the STM32 IMU (gyro_z, rad/s). Falls back to timer if insufficient
   #         valid gyro samples accumulate — so this is always safe.
   #         IMU is inside the chassis near motors → use spike rejection.
-  recovery_exit_mode: timer
+  recovery_exit_mode: gyro
   recovery_target_deg: 30.0       # degrees to rotate before exiting (gyro mode)
   gyro_max_rad_s: 4.0             # spike filter — discard |gyro_z| above this
   gyro_min_samples: 3             # min valid readings before trusting accumulation
@@ -345,7 +345,7 @@ control:
 car:
   lane_follower:
     linear_speed: 0.08     # keep slow — more turning authority at lower speed
-    kpp: 28.0              # was 22.0 — stronger curve response (robot was going wide before turning)
+    kpp: 25.0              # was 22.0 — stronger curve response (robot was going wide before turning)
     lookahead_frac: 0.30   # was 0.45 — shorter lookahead starts the turn earlier on curves;
                             # longer lookahead smooths out curves, causing the robot to undershoot
     ly_min_px: 30          # minimum lookahead floor for car
