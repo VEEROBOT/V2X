@@ -426,6 +426,14 @@ def main():
         recovery_target_deg    = ec.get('recovery_target_deg',    30.0),
         gyro_max_rad_s         = ec.get('gyro_max_rad_s',         4.0),
         gyro_min_samples       = ec.get('gyro_min_samples',       3),
+        outer_perp_cy          = ec.get('outer_perp_cy',          0.45),
+        outer_perp_turn        = ec.get('outer_perp_turn',        0.30),
+        outer_centre_guard     = ec.get('outer_centre_guard',     0.07),
+        outer_centre_turn      = ec.get('outer_centre_turn',      0.40),
+        outer_follow_kp        = ec.get('outer_follow_kp',        2.5),
+        outer_max_toward       = ec.get('outer_max_toward',       0.12),
+        outer_max_away         = ec.get('outer_max_away',         0.40),
+        outer_established_tol  = ec.get('outer_established_tol',  0.12),
     )
 
     # Sync yellow target between handler and follower so both controllers

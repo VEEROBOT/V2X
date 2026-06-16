@@ -266,8 +266,11 @@ emergency_handler:
                                  # all angular speeds below are MAGNITUDES — the handler
                                  # applies the correct sign automatically.
 
-  evasion_side: inner           # inner = veer toward inner island (default, original behaviour)
-                                 # outer = veer toward outer boundary
+  evasion_side: outer           # inner = veer toward inner island (original behaviour)
+                                 # outer = veer toward outer boundary (recommended — outer
+                                 #         boundary is a continuous strip with AprilTags 10-17
+                                 #         for positive arrival confirmation; matches real-world
+                                 #         "pull to the shoulder" behaviour).
                                  # flip this one word to switch; no other changes needed.
 
   # ── EVADING: robot veers toward evasion boundary ────────────────────────
@@ -276,15 +279,36 @@ emergency_handler:
                                  # Previously reduced to 0.18 because "0.35 overshot before boundary_near"
                                  # but that was caused by yellow_at_tgt also triggering HOLDING (now removed).
                                  # With only boundary_near as the exit condition, 0.35 is safe with min_evasion_s=1.5.
-  evasion_duration_s: 4.0       # backup timer if boundary_near never fires (1.5s open-loop + 2.5s yellow-track)
-  min_evasion_s: 1.5            # open-loop blind turn for this long before yellow tracking + boundary_near activate
-                                 # 0.35 rad/s × 1.5s = 0.525 rad ≈ 30° visible veer toward inner island
-                                 # previously 0.2s → only 2° rotation → looked identical to straight driving
+  evasion_duration_s: 6.0       # backup timer only — outer evasion drives toward the boundary
+                                 # until yellow is acquired, so this is a safety fallback if the
+                                 # boundary is never detected (raised from 4.0 to give time to reach it)
+  min_evasion_s: 1.5            # minimum time in EVADING before HOLDING is allowed (prevents an
+                                 # instant flip to HOLDING if yellow happened to be visible at entry)
   # Yellow-tracking proportional control (active once yellow centroid is visible):
   #   err = yellow_cx / frame_w - evasion_yellow_target
   #   wz  = evasion_yellow_kp * err - 0.15   (clamped to [evasion_angular_speed, -0.05])
-  evasion_yellow_target: 0.70   # want yellow at 70% across frame (right side = inner island)
+  evasion_yellow_target: 0.70   # want yellow at 70% across frame for INNER evasion (right side).
+                                 # For OUTER evasion the handler mirrors this to 0.30 automatically
+                                 # (left side = outer boundary for clockwise driving).
   evasion_yellow_kp: 2.5        # gain per frame-width fraction (2.5 × 0.20 err = 0.50 wz)
+
+  # ── OUTER evasion follow tuning (only used when evasion_side: outer) ──────
+  # The robot steers toward the outer yellow boundary and follows it, keeping
+  # yellow on the evasion side (LEFT for clockwise, rel≈0.30), NEVER in the
+  # centre, and NEVER crossing it (stays inside the arena). Behaviour:
+  #   • no yellow yet            → arc left-forward until the boundary is found
+  #   • yellow at TOP of frame   → perpendicular approach (curve): turn right to
+  #                                 swing the line down to the left and go parallel
+  #   • yellow near/over centre  → about to cross: hard right back into the arena
+  #   • yellow on the LEFT       → proportional follow, hold it at rel≈0.30
+  outer_perp_cy:       0.45     # yellow_cy_frac below this = "yellow at top" (perpendicular)
+  outer_perp_turn:     0.30     # rad/s right-turn to align when approaching perpendicular
+  outer_centre_guard:  0.07     # |rel-0.5| below this = "near centre" → anti-cross hard turn
+  outer_centre_turn:   0.40     # rad/s right-turn applied by the anti-cross guard
+  outer_follow_kp:     2.5      # proportional gain while following the boundary parallel
+  outer_max_toward:    0.12     # rad/s cap on turning INTO the boundary (prevents crossing)
+  outer_max_away:      0.40     # rad/s cap on turning AWAY from the boundary (safety, firmer)
+  outer_established_tol: 0.12   # |rel-target| below this = parallel & established → allow HOLDING
 
   # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
   hold_linear_speed: 0.05       # slow creep while pinned to inner island — lower speed gives yellow

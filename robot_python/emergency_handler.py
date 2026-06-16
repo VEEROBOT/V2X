@@ -66,7 +66,16 @@ class EmergencyHandler:
                  recovery_exit_mode:      str   = 'timer',
                  recovery_target_deg:     float = 30.0,
                  gyro_max_rad_s:          float = 4.0,
-                 gyro_min_samples:        int   = 3):
+                 gyro_min_samples:        int   = 3,
+                 # ── Outer-evasion follow tuning (evasion_side: outer) ──
+                 outer_perp_cy:           float = 0.45,
+                 outer_perp_turn:         float = 0.30,
+                 outer_centre_guard:      float = 0.07,
+                 outer_centre_turn:       float = 0.40,
+                 outer_follow_kp:         float = 2.5,
+                 outer_max_toward:        float = 0.12,
+                 outer_max_away:          float = 0.40,
+                 outer_established_tol:   float = 0.12):
 
         # Direction sign: +1 = clockwise (inner island to RIGHT of robot)
         #                 -1 = counterclockwise (inner island to LEFT of robot)
@@ -132,6 +141,16 @@ class EmergencyHandler:
         self._recovery_angle_rad   = 0.0   # accumulated rotation this RECOVERING arc
         self._recovery_gyro_samples = 0    # valid gyro readings this RECOVERING arc
         self._last_process_t       = 0.0   # for computing dt inside process()
+
+        # Outer-evasion follow tuning (see _outer_steer)
+        self._outer_perp_cy        = float(outer_perp_cy)
+        self._outer_perp_turn      = abs(float(outer_perp_turn))
+        self._outer_centre_guard   = float(outer_centre_guard)
+        self._outer_centre_turn    = abs(float(outer_centre_turn))
+        self._outer_follow_kp      = float(outer_follow_kp)
+        self._outer_max_toward     = abs(float(outer_max_toward))
+        self._outer_max_away       = abs(float(outer_max_away))
+        self._outer_est_tol        = float(outer_established_tol)
 
     # ── Input setters ────────────────────────────────────────────────────────
     def update_own_position(self, pos: Optional[Dict]):
@@ -246,66 +265,55 @@ class EmergencyHandler:
         # ── EVADING ─────────────────────────────────────────────────────────
         elif self._state == _EVADING:
             past_min = elapsed >= self._ev_min
-            # Inner evasion: rely only on boundary_near (yellow DENSE in bottom half of ROI,
-            # meaning the robot is physically at the inner island tape) and the timer.
-            # yellow_at_tgt is NOT used for inner evasion because the lane follower's
-            # yellow_cx is the lane line already at 65-70% of frame width in normal
-            # driving — it fires immediately before the robot has moved anywhere.
-            # Outer evasion: outer_tag + yellow_at_tgt still work (outer boundary has
-            # AprilTags and the centroid check is valid there).
-            yellow_at_tgt = (
-                yellow_cx is not None and
-                (yellow_cx / frame_w - self._ev_yellow_tgt) * self._dir * self._ev_side >= -0.05
-            )
+
             if self._ev_side > 0:
+                # ===== INNER evasion (toward inner island) — unchanged =====
+                # Rely only on boundary_near (yellow DENSE in bottom quarter of ROI,
+                # meaning the robot is physically at the inner island tape) + timer.
                 boundary_hit = past_min and boundary_near
-            else:
-                boundary_hit = past_min and (boundary_near or outer_tag or yellow_at_tgt)
-            if boundary_hit:
-                logger.info("EVADING → HOLDING: boundary reached "
-                            "(boundary_near=%s outer_tag=%s yellow_at_tgt=%s, %.1fs)",
-                            boundary_near, outer_tag, yellow_at_tgt, elapsed)
-                self._enter(_HOLDING, now)
-            elif elapsed >= self._ev_dur:
-                logger.info("EVADING → HOLDING: evasion timer expired")
-                self._enter(_HOLDING, now)
-            if self._ev_side > 0:
+                if boundary_hit:
+                    logger.info("EVADING → HOLDING: inner boundary reached "
+                                "(boundary_near=%s, %.1fs)", boundary_near, elapsed)
+                    self._enter(_HOLDING, now)
+                elif elapsed >= self._ev_dur:
+                    logger.info("EVADING → HOLDING: evasion timer expired")
+                    self._enter(_HOLDING, now)
+
                 # Inner evasion — two-phase:
                 # Phase 1 (elapsed < ev_min): blind open-loop turn toward inner island.
-                #   ev_min = 1.5 s → 0.35 rad/s × 1.5 s ≈ 30° rightward veer.
                 # Phase 2 (elapsed >= ev_min): alignment using yellow vertical position.
-                #   yellow_cy_frac tells WHERE in the frame yellow appears:
-                #     < 0.45 (top of ROI)  = robot is heading TOWARD the tape (perpendicular)
-                #                            → turn LEFT to swing tape from "ahead" to "right"
-                #     ≥ 0.45 (mid/low ROI) = robot is roughly parallel, tape is alongside
-                #                            → P-controller keeps yellow on the right side
                 if elapsed < self._ev_min:
                     ev_wz = self._ev_angular   # Phase 1: blind right turn, no sensing
                 elif yellow_cx is None or yellow_cy_frac is None:
                     ev_wz = self._ev_angular   # no yellow detected: keep going right
                 elif yellow_cy_frac < 0.45:
-                    # Yellow is at the top of frame = approaching the tape perpendicularly.
-                    # Turn LEFT so the tape swings from "ahead" into the right side of frame.
+                    # Yellow at top of frame = approaching tape perpendicularly.
+                    # Turn LEFT so tape swings from "ahead" into the right side.
                     ev_wz = self._dir * self._ev_side * 0.20   # CW inner: +0.20 (left)
                 else:
-                    # Yellow is mid-frame or near = robot roughly parallel to tape.
-                    # P-controller keeps yellow at the target fraction (right side of frame).
                     ev_wz = self._yellow_steer(yellow_cx, frame_w,
                                                max_toward=self._ev_angular,
                                                max_ease=-self._dir * self._ev_side * 0.05,
                                                bias=-self._dir * self._ev_side * 0.15,
                                                rescue_wz=self._dir * self._ev_side * 0.20)
-            else:
-                # Outer evasion: allow RIGHT turn when yellow reaches target.
-                # Without this, max_ease=+0.05 (left) keeps robot pushing into boundary
-                # even when yellow is at rel=0.30.  With right-capable max_ease and
-                # slight right bias, robot decelerates approach BEFORE crossing the tape.
-                ev_wz = self._yellow_steer(yellow_cx, frame_w,
-                                           max_toward=self._ev_angular,
-                                           max_ease=self._dir * self._ev_side * 0.08,
-                                           bias=self._dir * self._ev_side * 0.05,
-                                           rescue_wz=self._dir * self._ev_side * 0.20)
-            return self._ev_linear, ev_wz
+                return self._ev_linear, ev_wz
+
+            # ===== OUTER evasion (toward outer boundary) =====
+            # Steer toward the outer boundary and follow it (see _outer_steer).
+            # EVADING → HOLDING once the robot is established parallel to the
+            # boundary with yellow held on the evasion side, OR via the dense
+            # boundary / outer-AprilTag / timer fallbacks.
+            ev_vx, ev_wz, established = self._outer_steer(
+                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear)
+            if past_min and (established or boundary_near or outer_tag):
+                logger.info("EVADING → HOLDING: outer boundary reached "
+                            "(established=%s boundary_near=%s outer_tag=%s, %.1fs)",
+                            established, boundary_near, outer_tag, elapsed)
+                self._enter(_HOLDING, now)
+            elif elapsed >= self._ev_dur:
+                logger.info("EVADING → HOLDING: evasion timer expired")
+                self._enter(_HOLDING, now)
+            return ev_vx, ev_wz
 
         # ── HOLDING ──────────────────────────────────────────────────────────
         elif self._state == _HOLDING:
@@ -323,22 +331,13 @@ class EmergencyHandler:
                                                  max_ease=self._dir * self._ev_side * 0.05,
                                                  bias=-self._dir * self._ev_side * 0.10,
                                                  rescue_wz=self._dir * self._ev_side * 0.10)
-            else:
-                # Outer evasion: drive ALONG the outer yellow line (not hug — it's tape,
-                # not a wall).  Right bias keeps the robot curving with the boundary;
-                # yellow at rel≈0.30 (left) is the new guide like the white line.
-                hold_vx = self._ev_linear   # normal evasion speed, not slow creep
-                if yellow_cx is None:
-                    # Yellow gone → ease right (likely drifted past tape or thin section)
-                    hold_wz = self._dir * self._ev_side * 0.08   # CW outer: -0.08 (right)
-                else:
-                    # Yellow visible: proportional controller with right bias so robot
-                    # naturally curves along the outer boundary.
-                    hold_wz = self._yellow_steer(yellow_cx, frame_w,
-                                                 max_toward=-self._dir * self._ev_side * 0.12,
-                                                 max_ease=self._dir * self._ev_side * 0.08,
-                                                 bias=self._dir * self._ev_side * 0.05,
-                                                 rescue_wz=self._dir * self._ev_side * 0.05)
+                return hold_vx, hold_wz
+
+            # Outer evasion: keep driving ALONG the outer yellow boundary (yellow
+            # held on the evasion side, never centred, never crossed) while the
+            # ambulance passes.  Same controller as the EVADING approach.
+            hold_vx, hold_wz, _ = self._outer_steer(
+                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear)
             return hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
@@ -418,6 +417,65 @@ class EmergencyHandler:
         # Clamp between the two limits (works regardless of their sign order)
         lo, hi = min(max_toward, max_ease), max(max_toward, max_ease)
         return max(lo, min(hi, wz))
+
+    def _outer_steer(self, yellow_cx: Optional[float],
+                     yellow_cy_frac: Optional[float],
+                     frame_w: int, base_vx: float) -> Tuple[float, float, bool]:
+        """
+        OUTER-boundary follow controller — used in EVADING (approach) and HOLDING.
+
+        Goal: keep the OUTER yellow boundary on the evasion side of the frame
+        (clockwise → LEFT, rel ≈ _ev_yellow_tgt = 0.30) while driving forward,
+        never letting yellow reach the centre and never crossing it (so the
+        robot stays inside the arena).  Only one track line is visible at a
+        time, so during outer evasion the only yellow encountered is the outer
+        boundary — the inner island is never in view here.
+
+        Returns (vx, wz, established):
+            established — True once the robot is parallel to the boundary with
+            yellow held on the evasion side; used to advance EVADING → HOLDING.
+
+        Sign convention: wz > 0 = LEFT.  toward_outer = +self._dir
+            clockwise   (_dir=+1): toward_outer = +1 → LEFT  is toward the outer boundary
+            counter-cw  (_dir=-1): toward_outer = -1 → RIGHT is toward the outer boundary
+        """
+        toward_outer = float(self._dir)
+        target       = self._ev_yellow_tgt   # CW outer → 0.30 (left third)
+
+        # (1) No yellow yet → arc toward the outer boundary to find it.
+        if yellow_cx is None:
+            return base_vx, toward_outer * abs(self._ev_angular), False
+
+        rel = yellow_cx / float(frame_w)
+
+        # (2) Perpendicular approach: yellow lies across the TOP of the frame
+        #     (robot heading head-on into the boundary, typically on a curve).
+        #     Steer AWAY from the boundary so the line swings down to the
+        #     evasion side and the robot lines up parallel.  Slow down so the
+        #     robot does not cross the line while rotating.
+        if yellow_cy_frac is not None and yellow_cy_frac < self._outer_perp_cy:
+            return base_vx * 0.6, -toward_outer * self._outer_perp_turn, False
+
+        # (3) Centre guard: yellow at/over the centre means the robot is about to
+        #     cross the outer line (leave the arena).  Hard turn back inside.
+        crossing = (rel - 0.50) * toward_outer > 0.0
+        near_ctr = abs(rel - 0.50) < self._outer_centre_guard
+        if crossing or near_ctr:
+            return base_vx * 0.6, -toward_outer * self._outer_centre_turn, False
+
+        # (4) Parallel follow: proportional control holding yellow at `target`.
+        #     err > 0 → yellow toward centre → steer AWAY from outer (firm).
+        #     err < 0 → yellow toward edge   → steer TOWARD outer (limited, so
+        #               the robot can follow a boundary curving away without
+        #               lunging across it).
+        err = rel - target
+        wz  = -toward_outer * self._outer_follow_kp * err
+        toward_lim = toward_outer * self._outer_max_toward   # motion INTO boundary (limited)
+        away_lim   = -toward_outer * self._outer_max_away    # motion AWAY from boundary (firm)
+        lo, hi = min(toward_lim, away_lim), max(toward_lim, away_lim)
+        wz = max(lo, min(hi, wz))
+        established = abs(err) < self._outer_est_tol
+        return base_vx, wz, established
 
     def _enter(self, state: str, now: float):
         self._state      = state

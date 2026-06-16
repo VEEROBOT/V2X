@@ -59,6 +59,7 @@ class CentroidFollower(BaseFollower):
             'n_strips':  None,    # N/A for centroid
             'last_wz':   round(self._last_wz, 3),
             'yellow_cx': self._last_ycx,
+            'yellow_cy_frac': self._last_ycy,   # 0.0=top(far/ahead), 1.0=bottom(near/alongside)
         }
 
     def process(self, frame) -> Tuple[float, float]:
