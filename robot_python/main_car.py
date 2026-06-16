@@ -190,7 +190,8 @@ def _pi_temp() -> str:
 
 def _push_stream(streamer, full_frame, roi_panels, crop_y,
                  estimator, handler, bridge, broadcaster,
-                 joystick, armed, vx, wz, driver=None, name=''):
+                 joystick, armed, vx, wz, driver=None, name='',
+                 sim_emergency=False):
     import cv2, numpy as np
     from datetime import datetime
     # Top row: full camera frame (scaled 2× wider) with crop boundary
@@ -236,23 +237,45 @@ def _push_stream(streamer, full_frame, roi_panels, crop_y,
     mode      = 'MANUAL' if joystick.is_manual() else 'AUTO'
     arm_lbl   = 'ARMED' if armed else 'DISARMED'
 
+    ys      = handler.get_yield_status()
+    real_emg = bridge.is_emergency()
+
+    # Ambulance direction label for bar1
+    if ys['amb_known'] and ys['amb_behind'] is not None:
+        dir_lbl = f"BEHIND({ys['amb_gap']})" if ys['amb_behind'] else f"AHEAD({ys['amb_gap']})"
+    elif peer_zone >= 0:
+        dir_lbl = "AMB-NOFIX"
+    else:
+        dir_lbl = "AMB-NONE"
+
     bar1 = np.zeros((22, 640, 3), np.uint8)
     col1 = (0, 50, 220) if emg else (0, 200, 50)
-    row1 = [f"CAR zone={zone}", f"AMB zone={peer_zone}",
+    row1 = [f"CAR={zone}", f"AMB={peer_zone}({dir_lbl})",
             f"vx={vx:.2f}", f"wz={wz:+.2f}", state]
-    if off: row1.append("OFF-TRACK")
+    if off:            row1.append("OFF-TRACK")
+    if sim_emergency:  row1.append("SIM")
+    if ys['force_yield']: row1.append("FORCE-YIELD")
     cv2.putText(bar1, "  ".join(row1), (4, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, col1, 1)
 
     # ── Status bar — row 2: arm + mode + V2X + battery + Pi temp ─────────
     bar2 = np.zeros((22, 640, 3), np.uint8)
     arm_col = (0, 220, 50) if armed else (0, 80, 220)
-    v2x_col = (0, 50, 220) if emg else (120, 120, 120)
+    v2x_col = (0, 50, 220) if emg else ((0, 180, 255) if (real_emg or sim_emergency) else (120, 120, 120))
     cv2.putText(bar2, arm_lbl, (4, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, arm_col, 1)
     cv2.putText(bar2, mode, (110, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 215, 255), 1)
-    v2x_txt = "V2X:EMERGENCY" if emg else ("V2X:ACTIVE" if bridge.is_emergency() else "V2X:STANDBY")
+    if emg:
+        v2x_txt = "V2X:EVADING"
+    elif real_emg and sim_emergency:
+        v2x_txt = "V2X:LIVE+SIM"
+    elif real_emg:
+        v2x_txt = "V2X:LIVE"
+    elif sim_emergency:
+        v2x_txt = "V2X:SIM"
+    else:
+        v2x_txt = "V2X:STANDBY"
     cv2.putText(bar2, v2x_txt, (200, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, v2x_col, 1)
 
@@ -497,7 +520,8 @@ def main():
                     _push_stream(streamer, frame, panels, _crop_y,
                                  estimator, handler, bridge, broadcaster,
                                  joystick, _robot_armed, _stream_vx, _stream_wz,
-                                 driver=driver, name=_robot_name)
+                                 driver=driver, name=_robot_name,
+                                 sim_emergency=_sim_emergency)
 
             if not _robot_armed:
                 if frame is None:

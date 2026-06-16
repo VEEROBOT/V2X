@@ -171,6 +171,18 @@ class EmergencyHandler:
     def get_state(self) -> str:
         return self._state
 
+    def get_yield_status(self) -> dict:
+        """Returns info for the stream overlay — zones, direction, force flag."""
+        known   = self._position_known()
+        behind  = self._is_amb_behind() if known else None
+        gap     = self._amb_gap()        if known else None
+        return {
+            'force_yield': self._force_yield,
+            'amb_known':   known,
+            'amb_behind':  behind,
+            'amb_gap':     gap,
+        }
+
     # ── Main tick ────────────────────────────────────────────────────────────
     def process(self, vx: float, wz: float,
                 boundary_near: bool            = False,
