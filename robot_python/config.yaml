@@ -342,9 +342,9 @@ control:
 # main_car.py loads the [car] section; main_ambulance.py loads the [ambulance] section.
 car:
   lane_follower:
-    linear_speed: 0.10     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
-    kpp: 20.0              # car pure-pursuit gain — tune independently from ambulance
-    lookahead_frac: 0.38   # car lookahead — shorter = sharper turns, longer = smoother
+    linear_speed: 0.09     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
+    kpp: 24.0              # car pure-pursuit gain — tune independently from ambulance
+    lookahead_frac: 0.42   # car lookahead — shorter = sharper turns, longer = smoother
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
