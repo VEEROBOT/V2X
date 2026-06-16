@@ -40,10 +40,14 @@ class BaseFollower(ABC):
                  cyan_hsv_low:    Tuple = (80,  80,  80),
                  cyan_hsv_high:   Tuple = (100, 255, 255),
                  yellow_repel_frac: float = 0.65,
-                 lost_linear_frac:  float = 0.50,
-                 lost_stop_s:       float = 4.0,
-                 no_white_stop_s:   float = 8.0,
-                 debug:             bool  = False):
+                 lost_linear_frac:    float = 0.50,
+                 lost_stop_s:         float = 4.0,
+                 no_white_stop_s:     float = 8.0,
+                 lost_search_delay_s: float = 1.5,
+                 lost_search_turn_spd:float = 0.40,
+                 lost_search_arm_s:   float = 0.8,
+                 lost_search_fwd_s:   float = 0.4,
+                 debug:               bool  = False):
 
         self._linear_speed    = linear_speed
         self._max_angular     = max_angular_speed
@@ -57,10 +61,14 @@ class BaseFollower(ABC):
         self._cyan_lo         = np.array(cyan_hsv_low,    dtype=np.uint8)
         self._cyan_hi         = np.array(cyan_hsv_high,   dtype=np.uint8)
         self._repel_frac      = float(yellow_repel_frac)
-        self._lost_lin_frac   = float(lost_linear_frac)
-        self._lost_stop_s     = float(lost_stop_s)
-        self._no_white_stop_s = float(no_white_stop_s)
-        self._debug           = debug
+        self._lost_lin_frac      = float(lost_linear_frac)
+        self._lost_stop_s        = float(lost_stop_s)
+        self._no_white_stop_s    = float(no_white_stop_s)
+        self._search_delay_s     = float(lost_search_delay_s)
+        self._search_turn_spd    = float(lost_search_turn_spd)
+        self._search_arm_s       = float(lost_search_arm_s)
+        self._search_fwd_s       = float(lost_search_fwd_s)
+        self._debug              = debug
 
         # Shared PID / steering state
         self._prev_error     = 0.0
@@ -69,6 +77,10 @@ class BaseFollower(ABC):
         self._lost_start     = None
         self._no_white_start = None
         self._mode           = 'INIT'
+
+        # Lost-line search sweep state
+        self._search_phase   = 0    # 0=left, 1=right, 2=return-left, 3=forward
+        self._search_phase_t = 0.0  # monotonic timestamp of phase start (0 = not started)
 
         # Last frame data (used by get_roi_panels / get_debug_info)
         self._last_roi    = None
@@ -119,6 +131,44 @@ class BaseFollower(ABC):
         self._last_wz        = 0.0
         self._lost_start     = None
         self._no_white_start = None
+        self._search_phase   = 0
+        self._search_phase_t = 0.0
+
+    def _lost_search_tick(self, now: float) -> Tuple[float, float]:
+        """
+        Oscillating sweep when LOST beyond search_delay_s.
+
+        Pattern (repeating):
+          Phase 0  search_arm_s    : in-place left turn  (+wz)
+          Phase 1  search_arm_s×2  : in-place right turn (−wz, crosses center)
+          Phase 2  search_arm_s    : in-place left turn  (+wz, returns to heading)
+          Phase 3  search_fwd_s    : slow forward creep to advance position
+
+        At search_turn_spd=0.40 rad/s, search_arm_s=0.8 s → ±18° per arm.
+        Call reset_pid() on line re-acquisition to restart sweep state.
+        """
+        if self._search_phase_t == 0.0:
+            self._search_phase   = 0
+            self._search_phase_t = now
+
+        durations = (
+            self._search_arm_s,
+            self._search_arm_s * 2.0,
+            self._search_arm_s,
+            self._search_fwd_s,
+        )
+        if now - self._search_phase_t >= durations[self._search_phase]:
+            self._search_phase   = (self._search_phase + 1) % 4
+            self._search_phase_t = now
+
+        if self._search_phase == 0:
+            return 0.0, +self._search_turn_spd
+        elif self._search_phase == 1:
+            return 0.0, -self._search_turn_spd
+        elif self._search_phase == 2:
+            return 0.0, +self._search_turn_spd
+        else:
+            return self._linear_speed * self._lost_lin_frac, 0.0
 
     # ── Shared colour detection ──────────────────────────────────────────────
     def _compute_masks(self, roi):

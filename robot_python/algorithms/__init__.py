@@ -49,10 +49,14 @@ def create_follower(lc: dict, debug: bool = False):
         cyan_hsv_low      = (lc['cyan_h_low'],  lc['cyan_s_low'],  lc['cyan_v_low']),
         cyan_hsv_high     = (lc['cyan_h_high'], lc['cyan_s_high'], lc['cyan_v_high']),
         yellow_repel_frac = lc.get('yellow_repel_frac', 0.65),
-        lost_linear_frac  = lc.get('lost_linear_frac',  0.50),
-        lost_stop_s       = lc.get('lost_stop_s',        4.0),
-        no_white_stop_s   = lc.get('no_white_stop_s',    8.0),
-        debug             = debug,
+        lost_linear_frac     = lc.get('lost_linear_frac',      0.50),
+        lost_stop_s          = lc.get('lost_stop_s',            4.0),
+        no_white_stop_s      = lc.get('no_white_stop_s',        8.0),
+        lost_search_delay_s  = lc.get('lost_search_delay_s',    1.5),
+        lost_search_turn_spd = lc.get('lost_search_turn_spd',   0.40),
+        lost_search_arm_s    = lc.get('lost_search_arm_s',      0.8),
+        lost_search_fwd_s    = lc.get('lost_search_fwd_s',      0.4),
+        debug                = debug,
     )
 
     pp_params = dict(

@@ -197,14 +197,19 @@ class PurePursuitFollower(BaseFollower):
             self._last_wz = wz
             return self._linear_speed * 0.5, wz
 
-        # ── Priority 3: LOST — carry last steering ───────────────────────────
+        # ── Priority 3: LOST — carry last steering, then active search sweep ──
         if self._lost_start is None:
             self._lost_start = now
         self._mode = 'LOST'
         self._last_lookahead = None
-        if now - self._lost_start >= self._lost_stop_s:
+        elapsed = now - self._lost_start
+        if elapsed >= self._lost_stop_s:
             self._last_wz = 0.0
             return 0.0, 0.0
+        if elapsed >= self._search_delay_s:
+            vx, wz = self._lost_search_tick(now)
+            self._last_wz = wz
+            return vx, wz
         safe_wz = float(np.clip(self._last_good_wz, -0.55, 0.55))
         self._last_wz = safe_wz
         return self._linear_speed * self._lost_lin_frac, safe_wz

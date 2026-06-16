@@ -54,14 +54,22 @@ lane_follower:
   linear_speed: 0.10             # m/s — how fast the robot drives on the line
   max_angular_speed: 0.9         # rad/s — max turn rate (keep below 1.06 to avoid wheel reversal)
   lost_linear_frac: 0.45         # 45% speed while lost — slow enough to limit drift, fast enough to cross dash gaps
-  lost_stop_s: 4.0               # seconds of pure LOST (no yellow either) before full stop
+  lost_stop_s: 6.0               # seconds of pure LOST before full stop (increased: search sweep needs time)
   no_white_stop_s: 8.0           # seconds of no white at all (LOST+YELLOW combined) before full stop
+
+  # --- Lost-line search sweep (activates after lost_search_delay_s of LOST) ---
+  # Pattern: turn left → turn right (2× arm, crosses center) → return left → creep forward → repeat
+  # At 0.40 rad/s × 0.8 s = 0.32 rad ≈ 18° per arm  →  total sweep ±18° from starting heading
+  lost_search_delay_s:  1.5      # seconds of LOST before sweep begins (carry-wz first)
+  lost_search_turn_spd: 0.40     # rad/s for left/right sweep turns
+  lost_search_arm_s:    0.8      # seconds per half-sweep arm
+  lost_search_fwd_s:    0.4      # seconds to creep forward between sweeps
 
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
   # kpp=25 was too weak: max wz only 0.37 rad/s, robot achieved only 13% actual on curves.
   # kpp=50 caused instability when Ly was tiny (small n_strips). ly_min_px prevents that.
-  kpp: 24.0                      # steering gain — raise if turns too gentle, lower if oscillating
-  lookahead_frac: 0.6           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
+  kpp: 20.0                      # steering gain — raise if turns too gentle, lower if oscillating
+  lookahead_frac: 0.38           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
   ly_min_px: 30                  # minimum Ly in formula — prevents blow-up when only near strips detected
 
   # --- Recorded Path — Learning from Demonstration ---
@@ -263,8 +271,8 @@ emergency_handler:
                                  # flip this one word to switch; no other changes needed.
 
   # ── EVADING: robot veers toward evasion boundary ────────────────────────
-  evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
-  evasion_angular_speed: 0.25   # magnitude of fallback turn when no yellow visible
+  evasion_linear_speed: 0.08    # forward speed while evading (slow — turning dominates)
+  evasion_angular_speed: 0.18   # magnitude of fallback turn when no yellow visible
                                  # 0.35 overshot the inner island before boundary_near fired;
                                  # 0.25 gives the centroid controller time to react
   evasion_duration_s: 3.5       # backup timer if boundary_near never fires
@@ -277,7 +285,7 @@ emergency_handler:
   evasion_yellow_kp: 2.5        # gain per frame-width fraction (2.5 × 0.20 err = 0.50 wz)
 
   # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
-  hold_linear_speed: 0.04       # creep forward so robot moves with traffic (not a stationary obstacle)
+  hold_linear_speed: 0.08       # creep forward so robot moves with traffic (not a stationary obstacle)
                                  # yellow tracking keeps robot pinned to inner island during hold
   hold_timeout_s: 30.0     # safety net — force RECOVERING after this long even if ambulance still behind
   clear_delay_s: 1.0       # grace period after ambulance passes before starting RECOVERING arc
@@ -335,6 +343,9 @@ control:
 car:
   lane_follower:
     linear_speed: 0.10     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
+    kpp: 20.0              # car pure-pursuit gain — tune independently from ambulance
+    lookahead_frac: 0.38   # car lookahead — shorter = sharper turns, longer = smoother
+    ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
   control:
@@ -343,6 +354,9 @@ car:
 ambulance:
   lane_follower:
     linear_speed: 0.12     # ambulance line-follow speed — 0.18 is too fast for detection; tune up once stable
+    kpp: 20.0              # ambulance pure-pursuit gain — tune independently from car
+    lookahead_frac: 0.38   # ambulance lookahead — tune independently from car
+    ly_min_px: 30          # minimum lookahead floor for ambulance
   v2x_bridge:
     obu_loop_count: 0      # 0 = re-authenticate continuously — keeps ambulance connected to RSU at all times
   control:
