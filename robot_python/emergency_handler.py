@@ -139,6 +139,11 @@ class EmergencyHandler:
         self._passed_stamp = None
         self._clear_stamp  = None
         self._hold_min_gap = 999   # closest the ambulance got during this HOLD
+
+        # Outer-evasion boundary lock: True once yellow has been seen this episode.
+        # Stops the "no yellow → arc toward boundary" branch from steering the car
+        # back across the line if the detector blinks after it has locked on.
+        self._outer_yellow_seen = False
         self._last_pos_log_t: float = 0.0   # rate-limit "waiting for position fix" log
 
         # Gyro-exit mode (recovery_exit_mode: gyro)
@@ -500,8 +505,20 @@ class EmergencyHandler:
         # the robot creep LEFT over the tape.  `turn_away >= 0` is the magnitude of
         # the into-arena turn; the final wz is -toward_outer * turn_away.
 
-        # (1) No yellow yet → arc toward the outer boundary to go find it.
+        # Latch the boundary the first time we actually see yellow this episode.
+        if yellow_cx is not None:
+            self._outer_yellow_seen = True
+
+        # (1) No yellow detected this frame.
         if yellow_cx is None:
+            if self._outer_yellow_seen:
+                # We were tracking the boundary and the detector dropped it — it
+                # almost certainly swung up into the cropped top of the frame as we
+                # squared up to it (perpendicular on a curve), or just blinked.
+                # NEVER arc back toward it; ease AWAY into the arena at reduced
+                # speed until it reappears, so we cannot creep across the line.
+                return base_vx * 0.5, -toward_outer * self._outer_perp_turn, False
+            # Initial approach, boundary not found yet → arc toward it to go find it.
             return base_vx, toward_outer * abs(self._ev_angular), False
 
         rel      = yellow_cx / float(frame_w)
@@ -540,6 +557,8 @@ class EmergencyHandler:
     def _enter(self, state: str, now: float):
         self._state      = state
         self._state_time = now
+        if state == _EVADING:
+            self._outer_yellow_seen = False   # re-arm boundary lock for this episode
         if state == _HOLDING:
             self._passed_stamp = None
             self._clear_stamp  = None

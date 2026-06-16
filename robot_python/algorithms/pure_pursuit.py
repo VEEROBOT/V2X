@@ -369,6 +369,15 @@ class PurePursuitFollower(BaseFollower):
             self._last_yellow_lookahead = None
             return
 
+        # Robust vertical position of the yellow line from the (non-eroded) strip
+        # scan. The eroded moments centroid in _yellow_centroid drops thin / distant
+        # lines — exactly the perpendicular boundary seen across the TOP of the frame
+        # on a curve — and reports cy=None, so the evasion controller never realises
+        # "yellow is ahead" and drives across it. Strip rows are reliable here:
+        # row_from_bottom ≈ roi_h at the TOP (far / ahead), ≈ 0 at the BOTTOM (near).
+        mean_row = sum(r for r, _ in points) / len(points)
+        self._last_ycy = max(0.0, min(1.0, 1.0 - mean_row / float(roi_h)))
+
         lookahead_px = roi_h * self._lookahead_frac
         # _get_lookahead returns (cx - target, ly). Pass target=0 → returns absolute cx.
         cx_abs, ly = self._get_lookahead(points, target=0.0, lookahead_px=lookahead_px)
