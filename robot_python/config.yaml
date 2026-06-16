@@ -311,6 +311,9 @@ emergency_handler:
   outer_follow_kp:     2.5      # proportional gain easing back in as yellow drifts to centre
   outer_max_away:      0.40     # rad/s cap on the into-arena follow turn
   outer_established_tol: 0.10   # |rel-target| below this = parallel & established → allow HOLDING
+  cross_guard_vx:      0.02     # m/s forward speed when the tape is right under the nose
+                                 # (boundary_near / crossed): near-stop and rotate away in place
+                                 # so the robot can't translate across the outer line. 0.0 = pure spin
 
   # ── RECOVERING (return to white line) + RESUMING tuning ──────────────────
   # On recovery (ambulance gone / B button) the robot arcs inward until the

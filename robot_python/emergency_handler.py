@@ -75,6 +75,7 @@ class EmergencyHandler:
                  outer_follow_kp:         float = 2.5,
                  outer_max_away:          float = 0.40,
                  outer_established_tol:   float = 0.10,
+                 cross_guard_vx:          float = 0.02,
                  # ── RECOVERING white-seek + RESUMING tuning ──
                  rec_white_kp:            float = 0.006,
                  rec_white_max:           float = 0.60,
@@ -154,6 +155,7 @@ class EmergencyHandler:
         self._outer_follow_kp      = float(outer_follow_kp)
         self._outer_max_away       = abs(float(outer_max_away))
         self._outer_est_tol        = float(outer_established_tol)
+        self._cross_guard_vx       = abs(float(cross_guard_vx))
 
         # RECOVERING white-seek + RESUMING tuning
         self._rec_white_kp         = float(rec_white_kp)
@@ -320,7 +322,8 @@ class EmergencyHandler:
             # boundary with yellow held on the evasion side, OR via the dense
             # boundary / outer-AprilTag / timer fallbacks.
             ev_vx, ev_wz, established = self._outer_steer(
-                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear)
+                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear,
+                boundary_near=boundary_near)
             if past_min and (established or boundary_near or outer_tag):
                 logger.info("EVADING → HOLDING: outer boundary reached "
                             "(established=%s boundary_near=%s outer_tag=%s, %.1fs)",
@@ -353,7 +356,8 @@ class EmergencyHandler:
             # held on the evasion side, never centred, never crossed) while the
             # ambulance passes.  Same controller as the EVADING approach.
             hold_vx, hold_wz, _ = self._outer_steer(
-                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear)
+                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear,
+                boundary_near=boundary_near)
             return hold_vx, hold_wz
 
         # ── RECOVERING ───────────────────────────────────────────────────────
@@ -396,11 +400,24 @@ class EmergencyHandler:
             # Steering: as soon as the white line is visible ANYWHERE, steer
             # straight toward it while continuing to drive forward, so the robot
             # converges onto it smoothly (find line top-left/right → curve onto
-            # it → follow).  Until then, keep arcing inward toward the lane.
+            # it → follow).
             if white_found and white_err is not None:
                 seek_wz = -self._rec_white_kp * float(white_err)   # err>0 (white right)→turn right
                 seek_wz = max(-self._rec_white_max, min(self._rec_white_max, seek_wz))
                 return self._rec_linear, seek_wz
+
+            # No white yet.  ANTI-CROSS: if the outer boundary is still right
+            # ahead/under the nose (dense yellow, or yellow high in the frame),
+            # rotate INWARD almost in place instead of driving forward into it —
+            # otherwise the forward arc noses across the outer line and leaves the
+            # arena (exactly the failure seen in the field).  Only once the
+            # boundary is no longer ahead do we arc forward to go find the lane.
+            boundary_ahead = (self._ev_side < 0 and
+                              (boundary_near or
+                               (yellow_cx is not None and yellow_cy_frac is not None
+                                and yellow_cy_frac < self._outer_perp_cy)))
+            if boundary_ahead:
+                return self._cross_guard_vx, self._rec_angular
             return self._rec_linear, self._rec_angular
 
         # ── RESUMING ─────────────────────────────────────────────────────────
@@ -450,7 +467,8 @@ class EmergencyHandler:
 
     def _outer_steer(self, yellow_cx: Optional[float],
                      yellow_cy_frac: Optional[float],
-                     frame_w: int, base_vx: float) -> Tuple[float, float, bool]:
+                     frame_w: int, base_vx: float,
+                     boundary_near: bool = False) -> Tuple[float, float, bool]:
         """
         OUTER-boundary follow controller — used in EVADING (approach) and HOLDING.
 
@@ -489,9 +507,13 @@ class EmergencyHandler:
         near_ctr = abs(rel - 0.50) < self._outer_centre_guard
         perp     = (yellow_cy_frac is not None and yellow_cy_frac < self._outer_perp_cy)
 
-        # (2) About to leave / leaving the arena → hard turn back inside, slowed.
-        if crossed or near_ctr:
-            return base_vx * 0.6, -toward_outer * self._outer_centre_turn, False
+        # (2) About to leave / leaving the arena → turn back inside.  If the tape
+        #     is right under the nose (boundary_near) or already across centre,
+        #     nearly STOP forward motion and rotate in place so the robot cannot
+        #     translate across the outer line while it is turning away.
+        if boundary_near or crossed or near_ctr:
+            vx = self._cross_guard_vx if (boundary_near or crossed) else base_vx * 0.5
+            return vx, -toward_outer * self._outer_centre_turn, False
 
         # (3) Perpendicular approach: yellow lies across the TOP of the frame
         #     (robot heading head-on into the boundary, typically on a curve).
