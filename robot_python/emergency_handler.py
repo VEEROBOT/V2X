@@ -430,10 +430,13 @@ class EmergencyHandler:
         gap    = self._amb_gap()
         if behind and gap <= self._yield_gap:
             return True
-        if not behind:
-            logger.info("Ambulance AHEAD (amb=%d car=%d) — NOT yielding",
-                        self._amb_zone, self._own_zone)
-        elif gap > self._yield_gap:
-            logger.info("Ambulance %d zones behind (> %d gap) — not yielding yet",
-                        gap, self._yield_gap)
+        now = time.monotonic()
+        if now - self._last_pos_log_t >= 3.0:   # rate-limit: log at most once per 3 s
+            self._last_pos_log_t = now
+            if not behind:
+                logger.info("Ambulance AHEAD (amb=%d car=%d) — NOT yielding",
+                            self._amb_zone, self._own_zone)
+            elif gap > self._yield_gap:
+                logger.info("Ambulance %d zones behind (> %d gap) — not yielding yet",
+                            gap, self._yield_gap)
         return False
