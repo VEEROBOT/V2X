@@ -224,6 +224,20 @@ position:
   position_mode: dead_reckoning
   ticks_per_rev: 3600        # from STM32 robot_config.h: 900 CPR × 4 (quadrature X4)
 
+  # ── Outer-tag position keep-alive (for outer evasion) ─────────────────────────
+  # While the car evades onto the OUTER yellow boundary it can no longer see the
+  # inner tags that define its zone. dead_reckoning keeps the zone advancing from
+  # wheel ticks meanwhile, but that drifts. If your outer boundary carries tags
+  # (IDs 10-17), map each outer tag id -> the inner zone it sits next to, and the
+  # car will snap its position to that zone whenever it scans an outer tag — so
+  # behind/ahead vs the ambulance stays accurate the whole time it is off-track.
+  #
+  # Leave empty/disabled to rely on dead_reckoning only. To enable, list the REAL
+  # correspondence measured on your track, e.g. (derived from even spacing — VERIFY
+  # against your physical layout before trusting it):
+  #   outer_zone_map: {10: 0, 11: 1, 12: 3, 13: 4, 14: 5, 15: 6, 16: 8, 17: 9}
+  outer_zone_map: {}
+
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
@@ -339,6 +353,9 @@ emergency_handler:
 
   n_tags: 10              # must match position.n_inner_tags — total inner oval tags
   yield_zone_gap: 3       # yield only when ambulance is within this many zones behind (~2.1 m at 0.70 m spacing)
+  recover_min_gap: 1      # only treat the ambulance as "passed" (HOLDING→RECOVERING) once it
+                          # actually closed to within this many zones first. Stops the car
+                          # diving back to the white line before the ambulance reaches it.
   position_timeout_s: 3.0 # if no position update received in this window, treat position as stale
 
   # ── RECOVERING exit mode ─────────────────────────────────────────────────────

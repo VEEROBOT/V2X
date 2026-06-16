@@ -376,6 +376,7 @@ def main():
         position_mode  = pc.get('position_mode', 'tag_only'),
         wheel_radius_m = cfg['robot']['wheel_radius_m'],
         ticks_per_rev  = pc.get('ticks_per_rev', 3600),
+        outer_zone_map = pc.get('outer_zone_map'),
     )
 
     pbc      = cfg['position_broadcaster']
@@ -421,6 +422,7 @@ def main():
         resume_ramp_duration_s = ec.get('resume_ramp_duration_s', 2.0),
         n_tags                 = ec.get('n_tags',                 10),
         yield_zone_gap         = ec.get('yield_zone_gap',         3),
+        recover_min_gap        = ec.get('recover_min_gap',        1),
         position_timeout_s     = ec.get('position_timeout_s',     3.0),
         recovery_exit_mode     = ec.get('recovery_exit_mode',     'timer'),
         recovery_target_deg    = ec.get('recovery_target_deg',    30.0),

@@ -46,7 +46,8 @@ class PositionEstimator:
                  debug: bool = False,
                  position_mode: str = 'tag_only',
                  wheel_radius_m: float = 0.065,
-                 ticks_per_rev: int = 3600):
+                 ticks_per_rev: int = 3600,
+                 outer_zone_map: Optional[Dict] = None):
         """
         position_mode: 'tag_only'       — distance_m from tag pixel width (default)
                        'dead_reckoning' — distance_m from wheel encoder ticks;
@@ -66,6 +67,10 @@ class PositionEstimator:
         self._pos_mode      = position_mode
         # distance_per_tick (m): 2π × r / ticks_per_rev  (same formula as STM32's DISTANCE_PER_TICK)
         self._dist_per_tick = (2.0 * math.pi * wheel_radius_m) / ticks_per_rev
+        # outer tag id -> equivalent inner zone. Lets the car keep a live track
+        # position while it is out on the outer yellow boundary (e.g. during outer
+        # evasion) where no inner tag is visible. Empty = disabled.
+        self._outer_zone_map = {int(k): int(v) for k, v in (outer_zone_map or {}).items()}
 
         self._frame_cnt      = 0
         self._last_zone      = -1
@@ -132,10 +137,23 @@ class PositionEstimator:
                 self._last_ticks     = None   # force baseline re-capture at next update
             logger.debug("Inner tag id=%d  zone=%d  dist≈%.2fm", raw_id, raw_id, dist_m)
         elif raw_id < self._n_inner + self._n_outer:
-            # Outer reference tag — robot has drifted off the inner oval
+            # Outer reference tag — robot is off the inner oval (out on the outer
+            # yellow boundary, e.g. mid-evasion). Flag off-track AND, if a mapping
+            # is configured, carry the corresponding inner zone forward so the
+            # yield logic (behind/ahead, gap) stays correct instead of freezing
+            # on the last inner zone the car saw before it left the white line.
             if not self._off_track:
                 logger.warning("Outer reference tag id=%d — robot off inner track", raw_id)
             self._off_track = True
+            mapped = self._outer_zone_map.get(raw_id)
+            if mapped is not None:
+                self._last_zone = mapped
+                self._last_dist = dist_m
+                if self._pos_mode == 'dead_reckoning':
+                    self._dist_since_tag = 0.0
+                    self._last_ticks     = None
+                logger.debug("Outer tag id=%d → inner zone %d (off-track position keep-alive)",
+                             raw_id, mapped)
         else:
             logger.debug("Unknown tag id=%d — ignored", raw_id)
 
@@ -169,19 +187,30 @@ class PositionEstimator:
         avg_delta = sum(abs(c - p) for c, p in zip(curr_ticks, self._last_ticks)) / 4.0
         self._last_ticks = list(curr_ticks)
         dist = avg_delta * self._dist_per_tick
-        # Cap at 2 × tag_spacing — don't trust odometry beyond two tags of travel
-        self._dist_since_tag = min(self._dist_since_tag + dist, self._spacing * 2.0)
+        # Cap at one full loop of travel — long enough to track the car all the way
+        # through an outer-evasion arc (where it sees no inner tag for a while) but
+        # bounded so a stuck encoder can't run away. Any tag (inner or mapped outer)
+        # resets this to 0.
+        self._dist_since_tag = min(self._dist_since_tag + dist,
+                                   self._spacing * self._n_inner)
 
     def get_position(self) -> Optional[Dict]:
         """Returns {"zone": int, "distance_m": float, "off_track": bool} or None if no inner tag seen yet."""
         if self._last_zone < 0:
             return None
-        if self._pos_mode == 'dead_reckoning':
-            dist = round(self._dist_since_tag, 3)
+        if self._pos_mode == 'dead_reckoning' and self._spacing > 0:
+            # Advance the zone estimate by however many tag-spacings we've rolled
+            # since the last tag. This keeps the car's position moving forward even
+            # when no inner tag is visible (e.g. while it hugs the outer boundary
+            # during evasion), so behind/ahead vs the ambulance stays accurate.
+            steps = int(self._dist_since_tag // self._spacing)
+            zone  = (self._last_zone + steps) % self._n_inner
+            dist  = round(self._dist_since_tag - steps * self._spacing, 3)
         else:
+            zone = self._last_zone
             dist = round(self._last_dist, 3)
         return {
-            'zone':       self._last_zone,
+            'zone':       zone,
             'distance_m': dist,
             'off_track':  self._off_track,
         }

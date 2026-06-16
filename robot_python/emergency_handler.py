@@ -62,6 +62,7 @@ class EmergencyHandler:
                  resume_ramp_duration_s:  float = 2.0,
                  n_tags:                  int   = 10,
                  yield_zone_gap:          int   = 3,
+                 recover_min_gap:         int   = 1,
                  position_timeout_s:      float = 3.0,
                  recovery_exit_mode:      str   = 'timer',
                  recovery_target_deg:     float = 30.0,
@@ -112,6 +113,7 @@ class EmergencyHandler:
         self._ramp_dur     = resume_ramp_duration_s
         self._n_tags       = n_tags
         self._yield_gap    = yield_zone_gap
+        self._recover_min_gap = recover_min_gap
         self._pos_timeout  = position_timeout_s
 
         # State machine
@@ -136,6 +138,7 @@ class EmergencyHandler:
         # Holding timers
         self._passed_stamp = None
         self._clear_stamp  = None
+        self._hold_min_gap = 999   # closest the ambulance got during this HOLD
         self._last_pos_log_t: float = 0.0   # rate-limit "waiting for position fix" log
 
         # Gyro-exit mode (recovery_exit_mode: gyro)
@@ -540,6 +543,7 @@ class EmergencyHandler:
         if state == _HOLDING:
             self._passed_stamp = None
             self._clear_stamp  = None
+            self._hold_min_gap = 999
         if state == _RECOVERING:
             self._recovery_angle_rad    = 0.0
             self._recovery_gyro_samples = 0
@@ -548,10 +552,20 @@ class EmergencyHandler:
     def _check_holding(self, now: float, elapsed: float):
         """Decide when HOLDING → RECOVERING."""
         if self._position_known():
-            if not self._is_amb_behind():
+            # Track the closest the ambulance actually got during this hold. We
+            # only believe it has "passed" once it genuinely approached
+            # (gap <= recover_min_gap) and is now ahead. This guards against a
+            # stale/again-shifting zone reading flipping behind→ahead and kicking
+            # recovery before the ambulance ever reached the car.
+            gap = self._amb_gap()
+            if gap < self._hold_min_gap:
+                self._hold_min_gap = gap
+            approached = self._hold_min_gap <= self._recover_min_gap
+            if (not self._is_amb_behind()) and approached:
                 if self._passed_stamp is None:
                     self._passed_stamp = now
-                    logger.info("Ambulance overtook car — grace period starting")
+                    logger.info("Ambulance overtook car (closest gap=%d) — grace period starting",
+                                self._hold_min_gap)
                 elif (now - self._passed_stamp) >= self._clear_delay:
                     self._enter(_RECOVERING, now)
             else:
