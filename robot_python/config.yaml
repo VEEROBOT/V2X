@@ -334,7 +334,7 @@ control:
 # main_car.py loads the [car] section; main_ambulance.py loads the [ambulance] section.
 car:
   lane_follower:
-    linear_speed: 0.08     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
+    linear_speed: 0.10     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
   control:
@@ -342,7 +342,7 @@ car:
 
 ambulance:
   lane_follower:
-    linear_speed: 0.10     # ambulance line-follow speed — 0.18 was too fast for detection; tune up once stable
+    linear_speed: 0.12     # ambulance line-follow speed — 0.18 is too fast for detection; tune up once stable
   v2x_bridge:
     obu_loop_count: 0      # 0 = re-authenticate continuously — keeps ambulance connected to RSU at all times
   control:
