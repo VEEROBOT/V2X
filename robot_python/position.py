@@ -187,30 +187,23 @@ class PositionEstimator:
         avg_delta = sum(abs(c - p) for c, p in zip(curr_ticks, self._last_ticks)) / 4.0
         self._last_ticks = list(curr_ticks)
         dist = avg_delta * self._dist_per_tick
-        # Cap at one full loop of travel — long enough to track the car all the way
-        # through an outer-evasion arc (where it sees no inner tag for a while) but
-        # bounded so a stuck encoder can't run away. Any tag (inner or mapped outer)
-        # resets this to 0.
-        self._dist_since_tag = min(self._dist_since_tag + dist,
-                                   self._spacing * self._n_inner)
+        # Cap at 2 × tag_spacing — don't trust raw odometry beyond two tags of travel.
+        self._dist_since_tag = min(self._dist_since_tag + dist, self._spacing * 2.0)
 
     def get_position(self) -> Optional[Dict]:
         """Returns {"zone": int, "distance_m": float, "off_track": bool} or None if no inner tag seen yet."""
         if self._last_zone < 0:
             return None
-        if self._pos_mode == 'dead_reckoning' and self._spacing > 0:
-            # Advance the zone estimate by however many tag-spacings we've rolled
-            # since the last tag. This keeps the car's position moving forward even
-            # when no inner tag is visible (e.g. while it hugs the outer boundary
-            # during evasion), so behind/ahead vs the ambulance stays accurate.
-            steps = int(self._dist_since_tag // self._spacing)
-            zone  = (self._last_zone + steps) % self._n_inner
-            dist  = round(self._dist_since_tag - steps * self._spacing, 3)
+        # Zone is absolute — it only updates when an actual tag is read (inner, or a
+        # mapped outer tag via outer_zone_map). Dead-reckoning advances distance_m
+        # only; it does NOT synthesise zone, because raw wheel ticks count rotation
+        # as travel and would corrupt the behind/ahead yield decision while evading.
+        if self._pos_mode == 'dead_reckoning':
+            dist = round(self._dist_since_tag, 3)
         else:
-            zone = self._last_zone
             dist = round(self._last_dist, 3)
         return {
-            'zone':       zone,
+            'zone':       self._last_zone,
             'distance_m': dist,
             'off_track':  self._off_track,
         }

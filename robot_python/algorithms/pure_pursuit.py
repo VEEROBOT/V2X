@@ -67,8 +67,7 @@ class PurePursuitFollower(BaseFollower):
         self._last_good_conf: float = 0.0
         self._lx_alpha       = 0.55      # EMA factor for lookahead error smoothing
         self._smoothed_lx    = 0.0
-        self._wz_slew        = 0.20      # max |Δwz| per frame @ 20 Hz; raised 0.12→0.20 so steering
-                                         # ramps to full authority in ~4 frames instead of ~7
+        self._wz_slew        = 0.12      # max |Δwz| per frame @ 20 Hz
 
         # Yellow Pure Pursuit state — updated every process() call
         self._last_yellow_points:    List[Tuple[float, float]] = []
@@ -190,9 +189,9 @@ class PurePursuitFollower(BaseFollower):
                                 -self._max_angular, self._max_angular))
 
             if n_strips <= 3:
-                wz = float(np.clip(wz, -0.50, 0.50))   # raised 0.35→0.50: curve entry loses strips
+                wz = float(np.clip(wz, -0.35, 0.35))
             elif n_strips <= 5:
-                wz = float(np.clip(wz, -0.70, 0.70))   # raised 0.55→0.70: allow sharper turn
+                wz = float(np.clip(wz, -0.55, 0.55))
             elif edge_track:
                 # Edge-visible line on a curve is often legitimate; boost turn authority
                 # instead of under-steering away from the dashed guide.

@@ -422,11 +422,8 @@ control:
 car:
   lane_follower:
     linear_speed: 0.08     # keep slow — more turning authority at lower speed
-    kpp: 28.0              # raised 20→28: at 20 max wz on curves was ~0.37 rad/s, not enough to
-                            # track the inner bend; 28 gives ~0.59 rad/s on typical curve geometry
-    lookahead_frac: 0.28   # shortened 0.38→0.28: at 0.38 the lookahead point sits where the line
-                            # still looks nearly straight (small Lx) → weak turn command; 0.28 catches
-                            # the curve earlier giving larger Lx → sharper wz before the bend
+    kpp: 20.0              # car pure-pursuit steering gain
+    lookahead_frac: 0.38   # fraction of ROI height used as lookahead
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
