@@ -418,6 +418,7 @@ def main():
         recovery_angular_speed = ec.get('recovery_angular_speed', 0.45),
         recovery_duration_s    = ec.get('recovery_duration_s',    2.5),
         hold_timeout_s         = ec.get('hold_timeout_s',         30.0),
+        evade_watchdog_s       = ec.get('evade_watchdog_s',       5.0),
         clear_delay_s          = ec.get('clear_delay_s',          1.0),
         resume_ramp_duration_s = ec.get('resume_ramp_duration_s', 2.0),
         n_tags                 = ec.get('n_tags',                 10),

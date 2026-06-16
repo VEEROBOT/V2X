@@ -288,7 +288,9 @@ emergency_handler:
                                  # flip this one word to switch; no other changes needed.
 
   # ── EVADING: robot veers toward evasion boundary ────────────────────────
-  evasion_linear_speed: 0.07    # forward speed while evading (slightly slower = more turning authority)
+  evasion_linear_speed: 0.10    # forward speed while evading. Raised 0.07→0.10: at 0.07 the wide
+                                 # track (0.377 m) means the wz term dominates and forward motion
+                                 # runs near motor stiction, so the robot stalled/span on curves.
   evasion_angular_speed: 0.35   # magnitude of blind right turn during open-loop phase
                                  # Previously reduced to 0.18 because "0.35 overshot before boundary_near"
                                  # but that was caused by yellow_at_tgt also triggering HOLDING (now removed).
@@ -325,9 +327,11 @@ emergency_handler:
   outer_follow_kp:     2.5      # proportional gain easing back in as yellow drifts to centre
   outer_max_away:      0.40     # rad/s cap on the into-arena follow turn
   outer_established_tol: 0.10   # |rel-target| below this = parallel & established → allow HOLDING
-  cross_guard_vx:      0.02     # m/s forward speed when the tape is right under the nose
-                                 # (boundary_near / crossed): near-stop and rotate away in place
-                                 # so the robot can't translate across the outer line. 0.0 = pure spin
+  cross_guard_vx:      0.05     # m/s forward speed when the tape is right under the nose
+                                 # (boundary_near / crossed): rotate away while creeping. Raised
+                                 # 0.02→0.05 so the wheels stay above motor stiction and the robot
+                                 # actually rotates instead of sitting stuck. Still slow enough that
+                                 # it cannot translate across the outer line. 0.0 = pure spin
 
   # ── RECOVERING (return to white line) + RESUMING tuning ──────────────────
   # On recovery (ambulance gone / B button) the robot arcs inward until the
@@ -340,13 +344,18 @@ emergency_handler:
                                  # steering is NOT ramped so it can correct immediately
 
   # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
-  hold_linear_speed: 0.05       # slow creep while pinned to inner island — lower speed gives yellow
-                                 # tracking more time to react, preventing drift away from inner boundary
+  hold_linear_speed: 0.08       # creep while hugging the boundary. Raised 0.05→0.08 so it keeps
+                                 # moving (above motor stiction) while the ambulance passes.
   hold_timeout_s: 30.0     # safety net — force RECOVERING after this long even if ambulance still behind
+  evade_watchdog_s: 5.0    # bail-out: if off the white line this long with NO fresh ambulance
+                            # position to justify hiding, recover to white. With a live ambulance
+                            # broadcasting position this never fires; it rescues the blind/stuck case.
+                            # 0 = disabled.
   clear_delay_s: 1.0       # grace period after ambulance passes before starting RECOVERING arc
 
   # ── RECOVERING: drive back to white line ────────────────────────────────
-  recovery_linear_speed: 0.08   # forward speed during outward arc
+  recovery_linear_speed: 0.11   # forward speed during the return-to-white arc. Raised 0.08→0.11
+                                 # so it converges in one motion instead of stalling in the gray.
   recovery_angular_speed: 0.45  # magnitude — toward outer lane (away from inner island)
   recovery_duration_s: 3.5      # fallback timeout if white not found (2.5 was too short)
   resume_ramp_duration_s: 2.0   # ramp speed up over this many seconds after RECOVERING (prevents jerk)

@@ -58,6 +58,7 @@ class EmergencyHandler:
                  recovery_angular_speed:  float = 0.45,
                  recovery_duration_s:     float = 2.5,
                  hold_timeout_s:          float = 30.0,
+                 evade_watchdog_s:        float = 5.0,
                  clear_delay_s:           float = 1.0,
                  resume_ramp_duration_s:  float = 2.0,
                  n_tags:                  int   = 10,
@@ -109,6 +110,7 @@ class EmergencyHandler:
         self._rec_angular  = d * side * rec_mag   # inner/CW: pos (left back); outer/CW: neg (right back)
         self._rec_dur      = recovery_duration_s
         self._hold_max     = hold_timeout_s
+        self._evade_watchdog = evade_watchdog_s
         self._clear_delay  = clear_delay_s
         self._ramp_dur     = resume_ramp_duration_s
         self._n_tags       = n_tags
@@ -144,6 +146,9 @@ class EmergencyHandler:
         # Stops the "no yellow → arc toward boundary" branch from steering the car
         # back across the line if the detector blinks after it has locked on.
         self._outer_yellow_seen = False
+
+        # Watchdog: monotonic time the current evasion episode (EVADING) started.
+        self._evade_start_t = 0.0
         self._last_pos_log_t: float = 0.0   # rate-limit "waiting for position fix" log
 
         # Gyro-exit mode (recovery_exit_mode: gyro)
@@ -290,6 +295,12 @@ class EmergencyHandler:
 
         # ── EVADING ─────────────────────────────────────────────────────────
         elif self._state == _EVADING:
+            if self._watchdog_tripped(now):
+                logger.warning("Evade watchdog: %.1fs off white with no fresh "
+                               "ambulance data — recovering to white",
+                               now - self._evade_start_t)
+                self._enter(_RECOVERING, now)
+                return self._rec_linear, self._rec_angular
             past_min = elapsed >= self._ev_min
 
             if self._ev_side > 0:
@@ -344,6 +355,12 @@ class EmergencyHandler:
 
         # ── HOLDING ──────────────────────────────────────────────────────────
         elif self._state == _HOLDING:
+            if self._watchdog_tripped(now):
+                logger.warning("Evade watchdog: %.1fs off white with no fresh "
+                               "ambulance data — recovering to white",
+                               now - self._evade_start_t)
+                self._enter(_RECOVERING, now)
+                return self._rec_linear, self._rec_angular
             self._check_holding(now, elapsed)
             if self._ev_side > 0:
                 # Inner evasion: slow creep alongside the island tape.
@@ -559,6 +576,7 @@ class EmergencyHandler:
         self._state_time = now
         if state == _EVADING:
             self._outer_yellow_seen = False   # re-arm boundary lock for this episode
+            self._evade_start_t     = now     # start the off-white watchdog clock
         if state == _HOLDING:
             self._passed_stamp = None
             self._clear_stamp  = None
@@ -605,6 +623,21 @@ class EmergencyHandler:
     def _position_known(self) -> bool:
         age = time.monotonic() - self._amb_time
         return (self._own_zone >= 0 and self._amb_zone >= 0 and age < self._pos_timeout)
+
+    def _amb_fresh(self, now: float) -> bool:
+        """True when we have a recent ambulance position to act on."""
+        return self._amb_zone >= 0 and (now - self._amb_time) < self._pos_timeout
+
+    def _watchdog_tripped(self, now: float) -> bool:
+        """
+        Safety bail-out: once we've been off the white line for evade_watchdog_s
+        with NO fresh ambulance data to justify still hiding, give up and recover
+        to the white line instead of sitting blind on the boundary.
+        """
+        if self._evade_watchdog <= 0:
+            return False
+        return ((now - self._evade_start_t) >= self._evade_watchdog
+                and not self._amb_fresh(now))
 
     def _is_amb_behind(self) -> bool:
         diff = (self._own_zone - self._amb_zone) % self._n_tags
