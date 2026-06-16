@@ -269,13 +269,23 @@ class EmergencyHandler:
                 logger.info("EVADING → HOLDING: evasion timer expired")
                 self._enter(_HOLDING, now)
             if self._ev_side > 0:
-                # Inner evasion: range is entirely toward inner island.
-                # max_ease = -0.05 (tiny left = minimum rightward approach speed).
-                ev_wz = self._yellow_steer(yellow_cx, frame_w,
-                                           max_toward=self._ev_angular,
-                                           max_ease=-self._dir * self._ev_side * 0.05,
-                                           bias=-self._dir * self._ev_side * 0.15,
-                                           rescue_wz=self._dir * self._ev_side * 0.20)
+                # Inner evasion — two-phase:
+                # Phase 1 (elapsed < ev_min): blind open-loop turn toward inner island.
+                #   Yellow tracking is NOT used here because:
+                #   (a) The outer yellow boundary can appear on the WRONG side of the frame,
+                #       triggering the overshoot rescue (wz reversed) and cancelling the veer.
+                #   (b) ev_min is now 1.5 s — 0.35 rad/s × 1.5 s ≈ 30° visible rightward veer.
+                #   boundary_near is also suppressed (past_min=False) during this phase.
+                # Phase 2 (elapsed >= ev_min): yellow P-controller fine-tunes position and
+                #   boundary_near is re-enabled so the robot stops at the inner island tape.
+                if elapsed < self._ev_min:
+                    ev_wz = self._ev_angular   # open-loop: pure right turn, no yellow input
+                else:
+                    ev_wz = self._yellow_steer(yellow_cx, frame_w,
+                                               max_toward=self._ev_angular,
+                                               max_ease=-self._dir * self._ev_side * 0.05,
+                                               bias=-self._dir * self._ev_side * 0.15,
+                                               rescue_wz=self._dir * self._ev_side * 0.20)
             else:
                 # Outer evasion: allow RIGHT turn when yellow reaches target.
                 # Without this, max_ease=+0.05 (left) keeps robot pushing into boundary

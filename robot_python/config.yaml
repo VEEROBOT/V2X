@@ -271,13 +271,15 @@ emergency_handler:
                                  # flip this one word to switch; no other changes needed.
 
   # ── EVADING: robot veers toward evasion boundary ────────────────────────
-  evasion_linear_speed: 0.08    # forward speed while evading (slow — turning dominates)
-  evasion_angular_speed: 0.18   # magnitude of fallback turn when no yellow visible
-                                 # 0.35 overshot the inner island before boundary_near fired;
-                                 # 0.25 gives the centroid controller time to react
-  evasion_duration_s: 3.5       # backup timer if boundary_near never fires
-                                 # 6.0s at 0.35 rad/s = 120° overshoot; 3.5s at 0.25 = ~50°
-  min_evasion_s: 0.2            # ignore boundary_near for first 0.2s
+  evasion_linear_speed: 0.07    # forward speed while evading (slightly slower = more turning authority)
+  evasion_angular_speed: 0.35   # magnitude of blind right turn during open-loop phase
+                                 # Previously reduced to 0.18 because "0.35 overshot before boundary_near"
+                                 # but that was caused by yellow_at_tgt also triggering HOLDING (now removed).
+                                 # With only boundary_near as the exit condition, 0.35 is safe with min_evasion_s=1.5.
+  evasion_duration_s: 4.0       # backup timer if boundary_near never fires (1.5s open-loop + 2.5s yellow-track)
+  min_evasion_s: 1.5            # open-loop blind turn for this long before yellow tracking + boundary_near activate
+                                 # 0.35 rad/s × 1.5s = 0.525 rad ≈ 30° visible veer toward inner island
+                                 # previously 0.2s → only 2° rotation → looked identical to straight driving
   # Yellow-tracking proportional control (active once yellow centroid is visible):
   #   err = yellow_cx / frame_w - evasion_yellow_target
   #   wz  = evasion_yellow_kp * err - 0.15   (clamped to [evasion_angular_speed, -0.05])
@@ -285,8 +287,8 @@ emergency_handler:
   evasion_yellow_kp: 2.5        # gain per frame-width fraction (2.5 × 0.20 err = 0.50 wz)
 
   # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
-  hold_linear_speed: 0.08       # creep forward so robot moves with traffic (not a stationary obstacle)
-                                 # yellow tracking keeps robot pinned to inner island during hold
+  hold_linear_speed: 0.05       # slow creep while pinned to inner island — lower speed gives yellow
+                                 # tracking more time to react, preventing drift away from inner boundary
   hold_timeout_s: 30.0     # safety net — force RECOVERING after this long even if ambulance still behind
   clear_delay_s: 1.0       # grace period after ambulance passes before starting RECOVERING arc
 

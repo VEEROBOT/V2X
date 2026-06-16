@@ -115,15 +115,19 @@ class BaseFollower(ABC):
 
     def is_boundary_near(self) -> bool:
         """
-        True when yellow tape is close to the robot (bottom half of ROI has
-        significant yellow pixels).  Used by emergency_handler to detect
-        when the robot has reached the inner island line.
+        True when yellow tape is DENSE in the bottom quarter of the ROI (very close
+        to the robot).  Used by emergency_handler to detect when the robot has
+        physically reached the inner island tape during EVADING.
+
+        Threshold raised from ×2 to ×8 so the robot must be close enough that the
+        tape fills a meaningful area — prevents the check firing during normal driving
+        when the inner island is merely visible at the edge of the frame.
         """
         if self._last_mask_y is None:
             return False
         h = self._last_mask_y.shape[0]
-        near = self._last_mask_y[h // 2:, :]   # bottom half = near the robot
-        return int(near.sum()) > self._min_area * 255 * 2
+        near = self._last_mask_y[3 * h // 4:, :]   # bottom QUARTER = very close to robot
+        return int(near.sum()) > self._min_area * 255 * 8
 
     def reset_pid(self):
         self._integral       = 0.0
