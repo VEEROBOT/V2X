@@ -70,12 +70,16 @@ class EmergencyHandler:
                  # ── Outer-evasion follow tuning (evasion_side: outer) ──
                  outer_perp_cy:           float = 0.45,
                  outer_perp_turn:         float = 0.30,
-                 outer_centre_guard:      float = 0.07,
+                 outer_centre_guard:      float = 0.10,
                  outer_centre_turn:       float = 0.40,
                  outer_follow_kp:         float = 2.5,
-                 outer_max_toward:        float = 0.12,
                  outer_max_away:          float = 0.40,
-                 outer_established_tol:   float = 0.12):
+                 outer_established_tol:   float = 0.10,
+                 # ── RECOVERING white-seek + RESUMING tuning ──
+                 rec_white_kp:            float = 0.006,
+                 rec_white_max:           float = 0.60,
+                 rec_white_tol:           float = 40.0,
+                 resume_vx_floor:         float = 0.50):
 
         # Direction sign: +1 = clockwise (inner island to RIGHT of robot)
         #                 -1 = counterclockwise (inner island to LEFT of robot)
@@ -148,9 +152,14 @@ class EmergencyHandler:
         self._outer_centre_guard   = float(outer_centre_guard)
         self._outer_centre_turn    = abs(float(outer_centre_turn))
         self._outer_follow_kp      = float(outer_follow_kp)
-        self._outer_max_toward     = abs(float(outer_max_toward))
         self._outer_max_away       = abs(float(outer_max_away))
         self._outer_est_tol        = float(outer_established_tol)
+
+        # RECOVERING white-seek + RESUMING tuning
+        self._rec_white_kp         = float(rec_white_kp)
+        self._rec_white_max        = abs(float(rec_white_max))
+        self._rec_white_tol        = abs(float(rec_white_tol))
+        self._resume_vx_floor      = float(max(0.0, min(1.0, resume_vx_floor)))
 
     # ── Input setters ────────────────────────────────────────────────────────
     def update_own_position(self, pos: Optional[Dict]):
@@ -165,17 +174,20 @@ class EmergencyHandler:
 
     def cancel_sim(self):
         """
-        B button: cancel sim-triggered evasion and return to NORMAL immediately.
-        Clears the internal emergency flag so the FSM resets even if bridge still
-        has a real alert — bridge will re-assert it next tick via update_emergency(),
-        but without force_yield the position check resumes normally.
+        B button (ambulance departed): clear the sim emergency and recover.
+
+        Previously this snapped straight to NORMAL, which dumped the robot out
+        at the boundary onto the raw lane follower (it then drove straight /
+        almost out of the arena instead of coming back in).  Now, if we are
+        mid-evasion, it kicks off the proper RECOVERING → RESUMING → NORMAL
+        sequence so the robot steers back to the white line in a controlled arc.
         """
-        if self._state != _NORMAL:
-            logger.info("Emergency handler → NORMAL (B button sim cancel)")
-            self._state      = _NORMAL
-            self._state_time = time.monotonic()
         self._emergency  = False
         self._was_active = False
+        if self._state in (_EVADING, _HOLDING):
+            logger.info("B button: ambulance departed → RECOVERING")
+            self._enter(_RECOVERING, time.monotonic())
+        # RECOVERING / RESUMING already heading home; NORMAL has nothing to do.
 
     def set_force_yield(self, val: bool):
         """
@@ -224,7 +236,8 @@ class EmergencyHandler:
                 yellow_cy_frac: Optional[float] = None,
                 frame_w:        int             = 320,
                 outer_tag:      bool            = False,
-                gyro_z:         float           = 0.0) -> Tuple[float, float]:
+                gyro_z:         float           = 0.0,
+                white_err:      Optional[float] = None) -> Tuple[float, float]:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
 
@@ -241,6 +254,9 @@ class EmergencyHandler:
         frame_w         — camera frame width in pixels (default 320).
         outer_tag       — True when an outer boundary AprilTag was detected.
         gyro_z          — yaw-rate from STM32 IMU in rad/s (positive = left turn).
+        white_err       — signed lateral offset of the white line from the lane target
+                          in pixels (positive = white right of centre). Used during
+                          RECOVERING to actively steer back onto the white line.
         """
         self._last_vx = vx
         self._last_wz = wz
@@ -351,30 +367,40 @@ class EmergencyHandler:
                     self._recovery_angle_rad   += abs(gyro_z) * _gyro_dt
                     self._recovery_gyro_samples += 1
 
-            # Tag seen during recovery = robot has a position fix near the oval
-            tag_seen = (self._own_zone_t > self._state_time + 0.3)
+            # White is "re-acquired enough to hand back" only once it is roughly
+            # centred — not on the first edge-of-frame glimpse.  This keeps the
+            # robot driving toward the line in one motion instead of stalling and
+            # nudging little by little (and sometimes losing it).
+            white_centered = (white_found and white_err is not None
+                              and abs(white_err) <= self._rec_white_tol)
 
             if outer_tag and self._ev_side > 0:
                 # Inner evasion only: outer tag means robot overshot the white line
                 # during outward arc.  Stop now.
-                # (Outer evasion RECOVERING starts at the outer boundary — outer_tag
-                # fires immediately and must be ignored here.)
                 logger.warning("RECOVERING → RESUMING: outer tag seen — overshot white line")
                 self._enter(_RESUMING, now)
-            elif white_found:
-                logger.info("RECOVERING → RESUMING: white line re-acquired"
-                            + (" (tag z=%d)" % self._own_zone if tag_seen else ""))
+            elif white_centered:
+                logger.info("RECOVERING → RESUMING: white line centred (err=%s)", white_err)
                 self._enter(_RESUMING, now)
             elif (self._rec_exit_mode == 'gyro'
+                  and not white_found
                   and self._recovery_gyro_samples >= self._gyro_min_samples
                   and self._recovery_angle_rad    >= self._rec_target_rad):
                 logger.info("RECOVERING → RESUMING: gyro %.1f° reached (%d samples)",
                             math.degrees(self._recovery_angle_rad), self._recovery_gyro_samples)
                 self._enter(_RESUMING, now)
             elif elapsed >= self._rec_dur:
-                label = 'gyro fallback — timer fired' if self._rec_exit_mode == 'gyro' else 'timeout'
-                logger.info("RECOVERING → RESUMING: %s (white not found)", label)
+                logger.info("RECOVERING → RESUMING: timeout (white not centred)")
                 self._enter(_RESUMING, now)
+
+            # Steering: as soon as the white line is visible ANYWHERE, steer
+            # straight toward it while continuing to drive forward, so the robot
+            # converges onto it smoothly (find line top-left/right → curve onto
+            # it → follow).  Until then, keep arcing inward toward the lane.
+            if white_found and white_err is not None:
+                seek_wz = -self._rec_white_kp * float(white_err)   # err>0 (white right)→turn right
+                seek_wz = max(-self._rec_white_max, min(self._rec_white_max, seek_wz))
+                return self._rec_linear, seek_wz
             return self._rec_linear, self._rec_angular
 
         # ── RESUMING ─────────────────────────────────────────────────────────
@@ -383,7 +409,11 @@ class EmergencyHandler:
             if elapsed >= self._ramp_dur:
                 self._enter(_NORMAL, now)
                 logger.info("Resumed normal lane following")
-            return vx * ramp, wz * ramp
+            # Ramp forward speed up from a floor so the robot never stalls on
+            # re-entry, but keep FULL steering authority so it can correct the
+            # moment it picks up the line (no ramped-down, under-steering wz).
+            vx_scale = self._resume_vx_floor + (1.0 - self._resume_vx_floor) * ramp
+            return vx * vx_scale, wz
 
         return vx, wz
 
@@ -439,43 +469,48 @@ class EmergencyHandler:
             clockwise   (_dir=+1): toward_outer = +1 → LEFT  is toward the outer boundary
             counter-cw  (_dir=-1): toward_outer = -1 → RIGHT is toward the outer boundary
         """
-        toward_outer = float(self._dir)
-        target       = self._ev_yellow_tgt   # CW outer → 0.30 (left third)
+        toward_outer = float(self._dir)      # CW(+1): left is toward outer boundary
+        target       = self._ev_yellow_tgt   # CW outer → 0.30 (evasion-side third)
 
-        # (1) No yellow yet → arc toward the outer boundary to find it.
+        # KEY SAFETY RULE: once the boundary is in view, the robot only ever turns
+        # AWAY from it (into the arena) or drives straight — it never turns toward
+        # the boundary.  That makes it physically unable to drive across the outer
+        # line, and removes the old failure where a far-left yellow lookahead made
+        # the robot creep LEFT over the tape.  `turn_away >= 0` is the magnitude of
+        # the into-arena turn; the final wz is -toward_outer * turn_away.
+
+        # (1) No yellow yet → arc toward the outer boundary to go find it.
         if yellow_cx is None:
             return base_vx, toward_outer * abs(self._ev_angular), False
 
-        rel = yellow_cx / float(frame_w)
-
-        # (2) Perpendicular approach: yellow lies across the TOP of the frame
-        #     (robot heading head-on into the boundary, typically on a curve).
-        #     Steer AWAY from the boundary so the line swings down to the
-        #     evasion side and the robot lines up parallel.  Slow down so the
-        #     robot does not cross the line while rotating.
-        if yellow_cy_frac is not None and yellow_cy_frac < self._outer_perp_cy:
-            return base_vx * 0.6, -toward_outer * self._outer_perp_turn, False
-
-        # (3) Centre guard: yellow at/over the centre means the robot is about to
-        #     cross the outer line (leave the arena).  Hard turn back inside.
-        crossing = (rel - 0.50) * toward_outer > 0.0
+        rel      = yellow_cx / float(frame_w)
+        e_away   = (rel - target) * toward_outer        # >0 = yellow drifting toward centre
+        crossed  = (rel - 0.50) * toward_outer > 0.0    # yellow past centre on the cross side
         near_ctr = abs(rel - 0.50) < self._outer_centre_guard
-        if crossing or near_ctr:
+        perp     = (yellow_cy_frac is not None and yellow_cy_frac < self._outer_perp_cy)
+
+        # (2) About to leave / leaving the arena → hard turn back inside, slowed.
+        if crossed or near_ctr:
             return base_vx * 0.6, -toward_outer * self._outer_centre_turn, False
 
-        # (4) Parallel follow: proportional control holding yellow at `target`.
-        #     err > 0 → yellow toward centre → steer AWAY from outer (firm).
-        #     err < 0 → yellow toward edge   → steer TOWARD outer (limited, so
-        #               the robot can follow a boundary curving away without
-        #               lunging across it).
-        err = rel - target
-        wz  = -toward_outer * self._outer_follow_kp * err
-        toward_lim = toward_outer * self._outer_max_toward   # motion INTO boundary (limited)
-        away_lim   = -toward_outer * self._outer_max_away    # motion AWAY from boundary (firm)
-        lo, hi = min(toward_lim, away_lim), max(toward_lim, away_lim)
-        wz = max(lo, min(hi, wz))
-        established = abs(err) < self._outer_est_tol
-        return base_vx, wz, established
+        # (3) Perpendicular approach: yellow lies across the TOP of the frame
+        #     (robot heading head-on into the boundary, typically on a curve).
+        #     Turn into the arena so the line swings down to the evasion side and
+        #     the robot lines up parallel.  Slowed so it does not cross meanwhile.
+        if perp:
+            return base_vx * 0.6, -toward_outer * self._outer_perp_turn, False
+
+        # (4) Yellow alongside but drifting toward centre → ease back into the
+        #     arena, proportional to how far it has encroached past the target.
+        if e_away > self._outer_est_tol:
+            turn_away = min(self._outer_follow_kp * (e_away - self._outer_est_tol),
+                            self._outer_max_away)
+            return base_vx, -toward_outer * turn_away, False
+
+        # (5) Yellow sitting comfortably on the evasion side → drive straight
+        #     (parallel follow).  We deliberately do NOT chase a boundary that
+        #     curves away — drifting slightly inward is safe; crossing is not.
+        return base_vx, 0.0, True
 
     def _enter(self, state: str, now: float):
         self._state      = state

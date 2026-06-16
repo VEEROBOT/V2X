@@ -294,21 +294,33 @@ emergency_handler:
 
   # ── OUTER evasion follow tuning (only used when evasion_side: outer) ──────
   # The robot steers toward the outer yellow boundary and follows it, keeping
-  # yellow on the evasion side (LEFT for clockwise, rel≈0.30), NEVER in the
-  # centre, and NEVER crossing it (stays inside the arena). Behaviour:
+  # yellow on the evasion side (LEFT for clockwise, rel≈0.30). SAFETY RULE: once
+  # yellow is in view the robot only ever turns AWAY from the boundary (into the
+  # arena) or drives straight — it never turns toward it, so it cannot drive
+  # across the outer line. Behaviour:
   #   • no yellow yet            → arc left-forward until the boundary is found
-  #   • yellow at TOP of frame   → perpendicular approach (curve): turn right to
+  #   • yellow near/over centre  → about to cross: hard RIGHT back into the arena
+  #   • yellow at TOP of frame   → perpendicular approach (curve): turn RIGHT to
   #                                 swing the line down to the left and go parallel
-  #   • yellow near/over centre  → about to cross: hard right back into the arena
-  #   • yellow on the LEFT       → proportional follow, hold it at rel≈0.30
+  #   • yellow drifting to centre→ ease RIGHT proportional to encroachment
+  #   • yellow resting on LEFT   → drive straight (parallel follow, stays inside)
   outer_perp_cy:       0.45     # yellow_cy_frac below this = "yellow at top" (perpendicular)
-  outer_perp_turn:     0.30     # rad/s right-turn to align when approaching perpendicular
-  outer_centre_guard:  0.07     # |rel-0.5| below this = "near centre" → anti-cross hard turn
-  outer_centre_turn:   0.40     # rad/s right-turn applied by the anti-cross guard
-  outer_follow_kp:     2.5      # proportional gain while following the boundary parallel
-  outer_max_toward:    0.12     # rad/s cap on turning INTO the boundary (prevents crossing)
-  outer_max_away:      0.40     # rad/s cap on turning AWAY from the boundary (safety, firmer)
-  outer_established_tol: 0.12   # |rel-target| below this = parallel & established → allow HOLDING
+  outer_perp_turn:     0.30     # rad/s into-arena turn to align when perpendicular
+  outer_centre_guard:  0.10     # |rel-0.5| below this = "near centre" → anti-cross hard turn
+  outer_centre_turn:   0.40     # rad/s into-arena turn applied by the anti-cross guard
+  outer_follow_kp:     2.5      # proportional gain easing back in as yellow drifts to centre
+  outer_max_away:      0.40     # rad/s cap on the into-arena follow turn
+  outer_established_tol: 0.10   # |rel-target| below this = parallel & established → allow HOLDING
+
+  # ── RECOVERING (return to white line) + RESUMING tuning ──────────────────
+  # On recovery (ambulance gone / B button) the robot arcs inward until the
+  # white line appears, then steers straight toward it while still driving
+  # forward — converging in one smooth motion instead of stalling and nudging.
+  rec_white_kp:    0.006        # steer-toward-white gain (× white_err px). 80px→0.48 rad/s
+  rec_white_max:   0.60         # rad/s cap on the white-seek turn
+  rec_white_tol:   40           # |white_err| px below this = "centred" → finish recovery
+  resume_vx_floor: 0.50         # RESUMING starts at this fraction of follower speed (no stall);
+                                 # steering is NOT ramped so it can correct immediately
 
   # ── HOLDING: slow creep while hugging inner yellow ───────────────────────
   hold_linear_speed: 0.05       # slow creep while pinned to inner island — lower speed gives yellow

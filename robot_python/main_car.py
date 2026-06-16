@@ -428,12 +428,15 @@ def main():
         gyro_min_samples       = ec.get('gyro_min_samples',       3),
         outer_perp_cy          = ec.get('outer_perp_cy',          0.45),
         outer_perp_turn        = ec.get('outer_perp_turn',        0.30),
-        outer_centre_guard     = ec.get('outer_centre_guard',     0.07),
+        outer_centre_guard     = ec.get('outer_centre_guard',     0.10),
         outer_centre_turn      = ec.get('outer_centre_turn',      0.40),
         outer_follow_kp        = ec.get('outer_follow_kp',        2.5),
-        outer_max_toward       = ec.get('outer_max_toward',       0.12),
         outer_max_away         = ec.get('outer_max_away',         0.40),
-        outer_established_tol  = ec.get('outer_established_tol',  0.12),
+        outer_established_tol  = ec.get('outer_established_tol',  0.10),
+        rec_white_kp           = ec.get('rec_white_kp',           0.006),
+        rec_white_max          = ec.get('rec_white_max',          0.60),
+        rec_white_tol          = ec.get('rec_white_tol',          40.0),
+        resume_vx_floor        = ec.get('resume_vx_floor',        0.50),
     )
 
     # Sync yellow target between handler and follower so both controllers
@@ -587,6 +590,7 @@ def main():
                     yellow_cy_frac  = dbg.get('yellow_cy_frac'),
                     outer_tag       = estimator.is_off_track(),
                     gyro_z          = gyro_z,
+                    white_err       = dbg.get('white_err'),
                 )
             else:
                 # No camera, no joystick — hold stop
