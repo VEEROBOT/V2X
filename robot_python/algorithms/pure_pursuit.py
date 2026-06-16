@@ -46,11 +46,19 @@ class PurePursuitFollower(BaseFollower):
                  kpp:            float = 50.0,
                  lookahead_frac: float = 0.50,
                  ly_min_px:      float = 35.0,
+                 heading_kp:     float = 0.0,
+                 gyro_hold_kp:   float = 0.0,
+                 gyro_max_rad_s: float = 4.0,
                  **kwargs):
         super().__init__(**kwargs)
         self._kpp            = kpp
         self._lookahead_frac = lookahead_frac
         self._ly_min         = float(ly_min_px)
+        self._heading_kp     = float(heading_kp)      # curve anticipation from line angle
+        self._gyro_hold_kp   = float(gyro_hold_kp)    # yaw-rate hold gain while line lost
+        self._gyro_max_rate  = float(gyro_max_rad_s)  # spike rejection for gyro
+        self._smoothed_slope = 0.0
+        self._slope_alpha    = 0.5
         self._last_points:    List[Tuple[float, float]] = []   # (row_from_bottom, cx)
         self._last_lookahead: Optional[Tuple[float, float]] = None  # (Lx, Ly)
         self._last_n_strips:  int = 0
@@ -160,7 +168,24 @@ class PurePursuitFollower(BaseFollower):
             ly_safe = max(ly, self._ly_min)
             l_sq = lx * lx + ly_safe * ly_safe
             curvature = (2.0 * lx / l_sq) if l_sq > 1.0 else 0.0
-            wz = float(np.clip(-self._kpp * curvature,
+
+            # Heading/angle feed-forward: fit the strip centroids and steer on the
+            # line's tangent too, not just the lookahead offset. slope = d(cx)/d(row)
+            # > 0 means the line leans right as it recedes (curve turning right
+            # ahead) → add right turn. Anticipates curves so the robot starts the
+            # turn earlier instead of drifting wide then correcting late.
+            heading_wz = 0.0
+            if self._heading_kp > 0.0 and n_strips >= 4:
+                rows = np.array([p[0] for p in points], dtype=np.float64)
+                cxs  = np.array([p[1] for p in points], dtype=np.float64)
+                slope = float(np.polyfit(rows, cxs, 1)[0])
+                self._smoothed_slope = (self._slope_alpha * slope
+                                        + (1.0 - self._slope_alpha) * self._smoothed_slope)
+                heading_wz = -self._heading_kp * self._smoothed_slope
+            else:
+                self._smoothed_slope = 0.0
+
+            wz = float(np.clip(-self._kpp * curvature + heading_wz,
                                 -self._max_angular, self._max_angular))
 
             if n_strips <= 3:
@@ -219,9 +244,18 @@ class PurePursuitFollower(BaseFollower):
             vx, wz = self._lost_search_tick(now)
             self._last_wz = wz
             return vx, wz
-        safe_wz = float(np.clip(self._last_good_wz, -0.55, 0.55))
-        self._last_wz = safe_wz
-        return self._linear_speed * self._lost_lin_frac, safe_wz
+        # Brief gap: instead of replaying last_good_wz open-loop (which wanders as
+        # the wheels skid), hold the intended turn-rate closed-loop on the gyro —
+        # command wz so the measured yaw-rate tracks the last good rate. Keeps a
+        # straight section straight and a curve on its arc through the gap.
+        target = float(np.clip(self._last_good_wz, -0.55, 0.55))
+        if self._gyro_hold_kp > 0.0 and 0.02 < abs(self._gyro_z) <= self._gyro_max_rate:
+            hold_wz = target + self._gyro_hold_kp * (target - self._gyro_z)
+            hold_wz = float(np.clip(hold_wz, -0.55, 0.55))
+        else:
+            hold_wz = target
+        self._last_wz = hold_wz
+        return self._linear_speed * self._lost_lin_frac, hold_wz
 
     # ── Debug panel ──────────────────────────────────────────────────────────
     def get_roi_panels(self) -> Optional[np.ndarray]:

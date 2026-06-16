@@ -578,9 +578,10 @@ def main():
                     follower.record(vx, wz, zone)
             elif frame is not None:
                 # Autonomous — lane following through emergency handler
+                gyro_z = _telem.get('gyro_z', 0.0) if _telem else 0.0
+                follower.set_gyro(gyro_z)   # for gyro heading-hold while line is lost
                 vx, wz = follower.process(frame)
                 dbg = follower.get_debug_info()
-                gyro_z = _telem.get('gyro_z', 0.0) if _telem else 0.0
                 # Prefer yellow Pure Pursuit lookahead cx over raw centroid.
                 # PurePursuitFollower computes this every frame; CentroidFollower
                 # returns None (raw centroid used as fallback).

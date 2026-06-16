@@ -92,6 +92,10 @@ class BaseFollower(ABC):
 
         # Yellow Pure Pursuit lookahead — set by subclasses that implement it
         self._yellow_lookahead_cx: Optional[float] = None
+
+        # Latest IMU yaw-rate (rad/s), pushed in each frame via set_gyro().
+        # Used for gyro heading-hold while the line is briefly lost.
+        self._gyro_z: float = 0.0
         self._yellow_target_frac: float = 0.70   # updated via set_yellow_target()
 
         # Current zone — updated by main_car via set_zone() each loop tick
@@ -138,6 +142,10 @@ class BaseFollower(ABC):
         point rather than the nearest yellow pixels.
         """
         return self._yellow_lookahead_cx
+
+    def set_gyro(self, gyro_z: float) -> None:
+        """Push the latest IMU yaw-rate (rad/s) for gyro heading-hold in gaps."""
+        self._gyro_z = float(gyro_z)
 
     def is_boundary_near(self) -> bool:
         """

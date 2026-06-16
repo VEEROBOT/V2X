@@ -63,6 +63,9 @@ def create_follower(lc: dict, debug: bool = False):
         kpp            = lc.get('kpp', 50.0),
         lookahead_frac = lc.get('lookahead_frac', 0.50),
         ly_min_px      = lc.get('ly_min_px', 35.0),
+        heading_kp     = lc.get('heading_kp', 0.0),
+        gyro_hold_kp   = lc.get('gyro_hold_kp', 0.0),
+        gyro_max_rad_s = lc.get('gyro_max_rad_s', 4.0),
     )
 
     if algo == 'centroid':

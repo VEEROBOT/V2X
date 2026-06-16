@@ -72,6 +72,18 @@ lane_follower:
   lookahead_frac: 0.38           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
   ly_min_px: 30                  # minimum Ly in formula — prevents blow-up when only near strips detected
 
+  # --- Heading-aware steering + gyro heading-hold (pure_pursuit) ---
+  # heading_kp: feed-forward from the line's tangent angle (slope of the fitted
+  #   strip centroids). Makes the robot start curves earlier instead of drifting
+  #   wide then correcting late. 0 = disabled. Raise if it still turns late;
+  #   lower if it oversteers/weaves on straights. Typical 0.3–0.8.
+  heading_kp: 0.45
+  # gyro_hold_kp: while the white line is briefly lost (dash gaps / glare), hold
+  #   the last good turn-rate closed-loop on the IMU yaw-rate instead of replaying
+  #   it open-loop. 0 = disabled. Typical 0.4–0.8.
+  gyro_hold_kp: 0.5
+  gyro_max_rad_s: 4.0            # reject IMU spikes above this (EMI near motors)
+
   # --- Recorded Path — Learning from Demonstration ---
   #
   # HOW TO RECORD A TRAINING LAP:
