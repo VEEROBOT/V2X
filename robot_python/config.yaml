@@ -108,7 +108,21 @@ lane_follower:
   debug_image: false             # show OpenCV debug window (only when running with a display)
 
   # ┌─────────────────────────────────────────────────────────────────────────┐
-  # │  HSV COLOUR THRESHOLDS  —  tune here when changing location/lighting   │
+  # │  HSV COLOUR THRESHOLDS  —  tune here when changing location/lighting    │
+  # │                                                                         │
+  # │  FACTORY DEFAULTS (copy these back if you break something):             │
+  # │                                                                         │
+  # │    white_h_low: 0    white_h_high: 180                                  │
+  # │    white_s_low: 0    white_s_high:  70                                  │
+  # │    white_v_low: 150  white_v_high: 255                                  │
+  # │                                                                         │
+  # │    yellow_h_low:  20  yellow_h_high:  35                                │
+  # │    yellow_s_low:  80  yellow_s_high: 255                                │
+  # │    yellow_v_low:  80  yellow_v_high: 255                                │
+  # │                                                                         │
+  # │    cyan_h_low:  80  cyan_h_high: 100                                    │
+  # │    cyan_s_low:  80  cyan_s_high: 255                                    │
+  # │    cyan_v_low:  80  cyan_v_high: 255                                    │
   # │                                                                         │
   # │  HOW TO TUNE (2 minutes):                                               │
   # │    1. Open stream in browser:  http://<robot-ip>:5005/                  │
@@ -121,40 +135,40 @@ lane_follower:
   # │    4. Repeat until mask is clean.                                       │
   # │                                                                         │
   # │  WHAT H / S / V MEAN:                                                   │
-  # │    H = Hue        — the colour  (0=red  30=yellow  120=blue  180=end)  │
+  # │    H = Hue        — the colour  (0=red  30=yellow  120=blue  180=end)   │
   # │                     OpenCV uses 0–180 (half of the standard 360°)       │
   # │    S = Saturation — 0=grey/white   →   255=vivid colour                 │
   # │    V = Value      — 0=black        →   255=bright                       │
   # │                                                                         │
   # │  WHITE TAPE — what to change:                                           │
   # │    Robot ignores white line (shows LOST):                               │
-  # │      → lower white_v_low  (try 130 → 110 → 90)                         │
+  # │      → lower white_v_low  (try 130 → 110 → 90)                          │
   # │        cause: lighting too dim, tape not bright enough                  │
   # │    Robot follows floor / walls (shows WHITE but drives wrong):          │
-  # │      → raise white_v_low  (try 170 → 185 → 200)                        │
+  # │      → raise white_v_low  (try 170 → 185 → 200)                         │
   # │        cause: floor is too bright, mistaken for white tape              │
   # │    Robot wobbles on straight line:                                      │
-  # │      → lower white_s_high  (try 60 → 50)                               │
+  # │      → lower white_s_high  (try 60 → 50)                                │
   # │        cause: slightly coloured surface leaking into white mask         │
-  # │    Daylight / bright room:  raise white_v_low to 180–200               │
-  # │    Dark room / dim lights:  lower white_v_low to 120–130               │
+  # │    Daylight / bright room:  raise white_v_low to 180–200                │
+  # │    Dark room / dim lights:  lower white_v_low to 120–130                │
   # │                                                                         │
   # │  YELLOW TAPE — what to change:                                          │
   # │    Robot crosses yellow boundary (not detecting it):                    │
-  # │      → lower yellow_s_low  (try 60 → 40)                               │
-  # │      → widen H range: h_low 15, h_high 40                              │
+  # │      → lower yellow_s_low  (try 60 → 40)                                │
+  # │      → widen H range: h_low 15, h_high 40                               │
   # │    Random yellow detections (false positives):                          │
-  # │      → raise yellow_s_low  (try 100 → 120)                             │
-  # │      → narrow H range: h_low 22, h_high 32                             │
+  # │      → raise yellow_s_low  (try 100 → 120)                              │
+  # │      → narrow H range: h_low 22, h_high 32                              │
   # │    Yellow tape looks teal/blue on stream:                               │
   # │      → cyan range below catches it automatically, no change needed      │
   # │                                                                         │
   # │  SAFE LIMITS — do not go outside these:                                 │
-  # │    white_v_low   : 90 – 210   (below 90 = floor is white everywhere)   │
-  # │    white_s_high  : 40 – 90    (below 40 = misses slightly off-white)   │
-  # │    yellow_h_low  : 15 – 25    (below 15 = red starts leaking in)       │
-  # │    yellow_h_high : 30 – 45    (above 45 = green starts leaking in)     │
-  # │    yellow_s_low  : 40 – 120   (balance: sensitivity vs. noise)         │
+  # │    white_v_low   : 90 – 210   (below 90 = floor is white everywhere)    │
+  # │    white_s_high  : 40 – 90    (below 40 = misses slightly off-white)    │
+  # │    yellow_h_low  : 15 – 25    (below 15 = red starts leaking in)        │
+  # │    yellow_h_high : 30 – 45    (above 45 = green starts leaking in)      │
+  # │    yellow_s_low  : 40 – 120   (balance: sensitivity vs. noise)          │
   # └─────────────────────────────────────────────────────────────────────────┘
 
   # White centre-line (40 mm tape)  H: any  S: low (desaturated)  V: bright
@@ -162,7 +176,7 @@ lane_follower:
   white_h_high: 180
   white_s_low:   0
   white_s_high:  70
-  white_v_low:  150    # ← MOST COMMON CHANGE — raise if floor shows white, lower if tape not seen
+  white_v_low:  150    # Default 150 ← MOST COMMON CHANGE — raise if floor shows white, lower if tape not seen
   white_v_high: 255
 
   # Yellow boundary tape (40 mm, inner island + outer boundary)
