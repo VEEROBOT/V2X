@@ -60,8 +60,8 @@ lane_follower:
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
   # kpp=25 was too weak: max wz only 0.37 rad/s, robot achieved only 13% actual on curves.
   # kpp=50 caused instability when Ly was tiny (small n_strips). ly_min_px prevents that.
-  kpp: 22.0                      # steering gain — raise if turns too gentle, lower if oscillating
-  lookahead_frac: 0.45           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
+  kpp: 24.0                      # steering gain — raise if turns too gentle, lower if oscillating
+  lookahead_frac: 0.6           # fraction of ROI height used as lookahead (0.3=sharp, 0.6=smooth)
   ly_min_px: 30                  # minimum Ly in formula — prevents blow-up when only near strips detected
 
   # --- Recorded Path — Learning from Demonstration ---
@@ -297,7 +297,7 @@ emergency_handler:
   #         the STM32 IMU (gyro_z, rad/s). Falls back to timer if insufficient
   #         valid gyro samples accumulate — so this is always safe.
   #         IMU is inside the chassis near motors → use spike rejection.
-  recovery_exit_mode: timer
+  recovery_exit_mode: gyro
   recovery_target_deg: 30.0       # degrees to rotate before exiting (gyro mode)
   gyro_max_rad_s: 4.0             # spike filter — discard |gyro_z| above this
   gyro_min_samples: 3             # min valid readings before trusting accumulation
