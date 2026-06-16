@@ -59,10 +59,11 @@ lane_follower:
 
   # --- Lost-line search sweep (activates after lost_search_delay_s of LOST) ---
   # Pattern: turn left → turn right (2× arm, crosses center) → return left → creep forward → repeat
-  # At 0.40 rad/s × 0.8 s = 0.32 rad ≈ 18° per arm  →  total sweep ±18° from starting heading
-  lost_search_delay_s:  1.5      # seconds of LOST before sweep begins (carry-wz first)
+  # At 0.90 rad/s × 1.6 s = 1.44 rad ≈ 82° per arm  →  total sweep ±82° from starting heading
+  lost_search_delay_s:  0.3      # was 1.5 s — robot spun 47° before searching; search never appeared
+                                  # in the run log because it starts at 1.5 s but log ended at 1.06 s
   lost_search_turn_spd: 0.90     # rad/s for left/right sweep turns
-  lost_search_arm_s:    1.6      # seconds per half-sweep arm
+  lost_search_arm_s:    1.6      # seconds per half-sweep arm (82° per arm)
   lost_search_fwd_s:    0.8      # seconds to creep forward between sweeps
 
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
@@ -344,9 +345,9 @@ control:
 # main_car.py loads the [car] section; main_ambulance.py loads the [ambulance] section.
 car:
   lane_follower:
-    linear_speed: 0.09     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
-    kpp: 24.0              # car pure-pursuit gain — tune independently from ambulance
-    lookahead_frac: 0.42   # car lookahead — shorter = sharper turns, longer = smoother
+    linear_speed: 0.12     # car drives slower than default — chassis can't turn cleanly at 0.10 m/s on curves
+    kpp: 20.0              # car pure-pursuit gain — tune independently from ambulance
+    lookahead_frac: 0.38   # car lookahead — shorter = sharper turns, longer = smoother
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts
