@@ -88,6 +88,7 @@ class BaseFollower(ABC):
         self._last_mask_y = None
         self._last_cx     = None   # white x-position (meaning depends on algorithm)
         self._last_ycx    = None   # yellow centroid x
+        self._last_ycy: Optional[float] = None   # yellow centroid y, normalised 0=top 1=bottom
 
         # Yellow Pure Pursuit lookahead — set by subclasses that implement it
         self._yellow_lookahead_cx: Optional[float] = None
@@ -215,10 +216,13 @@ class BaseFollower(ABC):
         return mw, my | mc
 
     def _yellow_centroid(self, mask) -> Optional[float]:
-        """Uniform-weight centroid for yellow — only left/right direction matters."""
+        """Uniform-weight centroid for yellow — computes both x and y positions."""
         m = cv2.erode(mask, None, iterations=1)
         m = cv2.dilate(m,   None, iterations=2)
         M = cv2.moments(m)
         if M['m00'] < self._min_area * 10:
+            self._last_ycy = None
             return None
+        roi_h = mask.shape[0]
+        self._last_ycy = M['m01'] / M['m00'] / roi_h if roi_h > 0 else None
         return M['m10'] / M['m00']

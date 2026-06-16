@@ -199,28 +199,29 @@ class EmergencyHandler:
 
     # ── Main tick ────────────────────────────────────────────────────────────
     def process(self, vx: float, wz: float,
-                boundary_near: bool            = False,
-                white_found:   bool            = False,
-                yellow_cx:     Optional[float] = None,
-                frame_w:       int             = 320,
-                outer_tag:     bool            = False,
-                gyro_z:        float           = 0.0) -> Tuple[float, float]:
+                boundary_near:  bool            = False,
+                white_found:    bool            = False,
+                yellow_cx:      Optional[float] = None,
+                yellow_cy_frac: Optional[float] = None,
+                frame_w:        int             = 320,
+                outer_tag:      bool            = False,
+                gyro_z:         float           = 0.0) -> Tuple[float, float]:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
 
-        boundary_near — True when camera sees yellow tape close ahead (inner island);
-                        triggers HOLDING (but only after min_evasion_s in EVADING).
-        white_found   — True when the lane follower has re-acquired the white line;
-                        used by RECOVERING to exit early.
-        yellow_cx     — pixel X of yellow centroid in the camera frame (None if not seen);
-                        used for proportional steering during EVADING and HOLDING.
-        frame_w       — camera frame width in pixels (default 320).
-        outer_tag     — True when an outer boundary AprilTag (IDs 10-17) was detected.
-                        Inner evasion RECOVERING: robot overshot the white line — stop arc.
-                        Outer evasion EVADING: robot has reached the outer boundary — start HOLDING.
-        gyro_z        — yaw-rate from STM32 IMU in rad/s (positive = left turn).
-                        Only used when recovery_exit_mode == 'gyro'. Safe to pass
-                        even in timer mode — value is ignored.
+        boundary_near   — True when yellow tape is dense in the bottom quarter of the ROI;
+                          triggers HOLDING (only after min_evasion_s in EVADING).
+        white_found     — True when the lane follower has re-acquired the white line.
+        yellow_cx       — pixel X of yellow at the Pure Pursuit lookahead distance (None if
+                          not seen). Used for proportional steering in EVADING phase 2 and HOLDING.
+        yellow_cy_frac  — normalised vertical centroid of the yellow blob: 0.0 = top of ROI
+                          (yellow is far ahead, robot approaching tape perpendicularly),
+                          1.0 = bottom (yellow is close alongside the robot).
+                          Used to distinguish "yellow at top → turn left to align" from
+                          "yellow on right → follow it".
+        frame_w         — camera frame width in pixels (default 320).
+        outer_tag       — True when an outer boundary AprilTag was detected.
+        gyro_z          — yaw-rate from STM32 IMU in rad/s (positive = left turn).
         """
         self._last_vx = vx
         self._last_wz = wz
@@ -271,16 +272,24 @@ class EmergencyHandler:
             if self._ev_side > 0:
                 # Inner evasion — two-phase:
                 # Phase 1 (elapsed < ev_min): blind open-loop turn toward inner island.
-                #   Yellow tracking is NOT used here because:
-                #   (a) The outer yellow boundary can appear on the WRONG side of the frame,
-                #       triggering the overshoot rescue (wz reversed) and cancelling the veer.
-                #   (b) ev_min is now 1.5 s — 0.35 rad/s × 1.5 s ≈ 30° visible rightward veer.
-                #   boundary_near is also suppressed (past_min=False) during this phase.
-                # Phase 2 (elapsed >= ev_min): yellow P-controller fine-tunes position and
-                #   boundary_near is re-enabled so the robot stops at the inner island tape.
+                #   ev_min = 1.5 s → 0.35 rad/s × 1.5 s ≈ 30° rightward veer.
+                # Phase 2 (elapsed >= ev_min): alignment using yellow vertical position.
+                #   yellow_cy_frac tells WHERE in the frame yellow appears:
+                #     < 0.45 (top of ROI)  = robot is heading TOWARD the tape (perpendicular)
+                #                            → turn LEFT to swing tape from "ahead" to "right"
+                #     ≥ 0.45 (mid/low ROI) = robot is roughly parallel, tape is alongside
+                #                            → P-controller keeps yellow on the right side
                 if elapsed < self._ev_min:
-                    ev_wz = self._ev_angular   # open-loop: pure right turn, no yellow input
+                    ev_wz = self._ev_angular   # Phase 1: blind right turn, no sensing
+                elif yellow_cx is None or yellow_cy_frac is None:
+                    ev_wz = self._ev_angular   # no yellow detected: keep going right
+                elif yellow_cy_frac < 0.45:
+                    # Yellow is at the top of frame = approaching the tape perpendicularly.
+                    # Turn LEFT so the tape swings from "ahead" into the right side of frame.
+                    ev_wz = self._dir * self._ev_side * 0.20   # CW inner: +0.20 (left)
                 else:
+                    # Yellow is mid-frame or near = robot roughly parallel to tape.
+                    # P-controller keeps yellow at the target fraction (right side of frame).
                     ev_wz = self._yellow_steer(yellow_cx, frame_w,
                                                max_toward=self._ev_angular,
                                                max_ease=-self._dir * self._ev_side * 0.05,
@@ -302,13 +311,18 @@ class EmergencyHandler:
         elif self._state == _HOLDING:
             self._check_holding(now, elapsed)
             if self._ev_side > 0:
-                # Inner evasion: slow creep against physical island wall.
+                # Inner evasion: slow creep alongside the island tape.
                 hold_vx = self._hold_vx
-                hold_wz = self._yellow_steer(yellow_cx, frame_w,
-                                             max_toward=-self._dir * self._ev_side * 0.25,
-                                             max_ease=self._dir * self._ev_side * 0.05,
-                                             bias=-self._dir * self._ev_side * 0.10,
-                                             rescue_wz=self._dir * self._ev_side * 0.10)
+                if yellow_cy_frac is not None and yellow_cy_frac < 0.40:
+                    # Yellow still at top = not yet parallel (entered HOLDING early via timer).
+                    # Continue left turn to finish alignment before starting to follow.
+                    hold_wz = self._dir * self._ev_side * 0.15   # CW inner: +0.15 (left)
+                else:
+                    hold_wz = self._yellow_steer(yellow_cx, frame_w,
+                                                 max_toward=-self._dir * self._ev_side * 0.25,
+                                                 max_ease=self._dir * self._ev_side * 0.05,
+                                                 bias=-self._dir * self._ev_side * 0.10,
+                                                 rescue_wz=self._dir * self._ev_side * 0.10)
             else:
                 # Outer evasion: drive ALONG the outer yellow line (not hug — it's tape,
                 # not a wall).  Right bias keeps the robot curving with the boundary;

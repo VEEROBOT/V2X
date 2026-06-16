@@ -81,12 +81,13 @@ class PurePursuitFollower(BaseFollower):
             white_err = None
             ly_px     = None
         return {
-            'mode':      self._mode,
-            'white_err': white_err,
-            'ly_px':     ly_px,
-            'n_strips':  self._last_n_strips,
-            'last_wz':   round(self._last_wz, 3),
-            'yellow_cx': self._last_ycx,
+            'mode':          self._mode,
+            'white_err':     white_err,
+            'ly_px':         ly_px,
+            'n_strips':      self._last_n_strips,
+            'last_wz':       round(self._last_wz, 3),
+            'yellow_cx':     self._last_ycx,
+            'yellow_cy_frac': self._last_ycy,   # 0.0=top(far/ahead), 1.0=bottom(near/alongside)
         }
 
     def process(self, frame) -> Tuple[float, float]:

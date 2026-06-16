@@ -573,11 +573,12 @@ def main():
                 _yellow_cx = _yla_cx if _yla_cx is not None else dbg.get('yellow_cx')
                 vx, wz = handler.process(
                     vx, wz,
-                    boundary_near = follower.is_boundary_near(),
-                    white_found   = (dbg.get('mode') == 'WHITE'),
-                    yellow_cx     = _yellow_cx,
-                    outer_tag     = estimator.is_off_track(),
-                    gyro_z        = gyro_z,
+                    boundary_near   = follower.is_boundary_near(),
+                    white_found     = (dbg.get('mode') == 'WHITE'),
+                    yellow_cx       = _yellow_cx,
+                    yellow_cy_frac  = dbg.get('yellow_cy_frac'),
+                    outer_tag       = estimator.is_off_track(),
+                    gyro_z          = gyro_z,
                 )
             else:
                 # No camera, no joystick — hold stop
