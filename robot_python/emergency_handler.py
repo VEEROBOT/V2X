@@ -144,6 +144,20 @@ class EmergencyHandler:
             self._amb_zone = int(pos.get('zone', -1))
             self._amb_time = time.monotonic()
 
+    def cancel_sim(self):
+        """
+        B button: cancel sim-triggered evasion and return to NORMAL immediately.
+        Clears the internal emergency flag so the FSM resets even if bridge still
+        has a real alert — bridge will re-assert it next tick via update_emergency(),
+        but without force_yield the position check resumes normally.
+        """
+        if self._state != _NORMAL:
+            logger.info("Emergency handler → NORMAL (B button sim cancel)")
+            self._state      = _NORMAL
+            self._state_time = time.monotonic()
+        self._emergency  = False
+        self._was_active = False
+
     def set_force_yield(self, val: bool):
         """
         True  → skip position check; yield immediately when emergency is active.

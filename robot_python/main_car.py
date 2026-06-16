@@ -490,9 +490,8 @@ def main():
                 logger.info("*** SIM: ambulance ARRIVE (A button) ***")
             if joystick.get_amb_depart():
                 _sim_emergency = False
-                handler.set_force_yield(False)  # restore position logic
-                # Note: if real V2X is still active, bridge.is_emergency() stays True
-                # and position-based logic takes over — B cannot suppress a real ambulance.
+                handler.set_force_yield(False)
+                handler.cancel_sim()
                 logger.info("*** SIM: ambulance DEPART (B button) ***")
             if joystick.get_train_toggle() and hasattr(follower, 'toggle_training'):
                 follower.toggle_training()
