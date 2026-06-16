@@ -9,9 +9,10 @@ OBU_DIR="$REPO_DIR/v2x_testbed/obu"
 OBU_CONFIG="$OBU_DIR/config/obu_local.json"
 KEY_DIR="${WORKING_DIR}/keys_$(hostname)"
 
-# Derive entity_id from hostname (same transform as setup.sh)
+# Derive entity_id from hostname — uppercase only, hyphens and digits preserved
+# Example: v2x-car-01 → V2X-CAR-01
 MY_HOSTNAME=$(hostname)
-ENTITY_ID=$(echo "$MY_HOSTNAME" | tr '[:lower:]-' '[:upper:]_' | tr -cd 'A-Z0-9_')
+ENTITY_ID=$(echo "$MY_HOSTNAME" | tr '[:lower:]' '[:upper:]')
 
 # Read RSU/desktop IPs from the reference config
 RSU_IP=$(python3 -c "import json; c=json.load(open('$OBU_DIR/config/obu1_config.json')); print(c['rsu_ip'])" 2>/dev/null || echo "192.168.0.103")
