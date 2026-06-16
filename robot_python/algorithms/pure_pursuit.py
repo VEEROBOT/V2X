@@ -61,6 +61,10 @@ class PurePursuitFollower(BaseFollower):
         self._smoothed_lx    = 0.0
         self._wz_slew        = 0.12      # max |Δwz| per frame @ 20 Hz
 
+        # Yellow Pure Pursuit state — updated every process() call
+        self._last_yellow_points:    List[Tuple[float, float]] = []
+        self._last_yellow_lookahead: Optional[Tuple[float, float]] = None  # (cx_at_lookahead, ly)
+
     # ── Public API ───────────────────────────────────────────────────────────
     def get_mode(self) -> str:
         return self._mode
@@ -98,6 +102,10 @@ class PurePursuitFollower(BaseFollower):
         roi_w  = roi.shape[1]
         target = roi_w / 2.0 + self._lane_offset
         now    = time.monotonic()
+
+        # Yellow Pure Pursuit lookahead — updated every frame so the emergency
+        # handler gets a look-ahead cx instead of the raw bottom-of-frame centroid.
+        self._update_yellow_lookahead(mask_y, roi_w, roi_h)
 
         # Scan the white mask in horizontal strips
         points = self._scan_strips(mask_w, roi_w)
@@ -242,8 +250,23 @@ class PurePursuitFollower(BaseFollower):
             cv2.putText(left, f"Lx={int(lx):+d}", (2, 12),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
 
+        # Raw yellow centroid (small dot, for comparison)
         if self._last_ycx is not None:
-            cv2.circle(left, (int(self._last_ycx), h * 3 // 4), 6, (0, 215, 255), -1)
+            cv2.circle(left, (int(self._last_ycx), h * 3 // 4), 4, (0, 215, 255), -1)
+
+        # Yellow Pure Pursuit overlay: strip centroids + lookahead point
+        y_target_px = int(w * self._yellow_target_frac)
+        cv2.line(left, (y_target_px, 0), (y_target_px, h), (0, 160, 215), 1)  # yellow target line
+        for row_from_bottom, cx in self._last_yellow_points:
+            row_from_top = int(h - row_from_bottom)
+            cv2.circle(left, (int(cx), row_from_top), 2, (0, 160, 215), -1)   # yellow strip dots
+        if self._last_yellow_lookahead is not None:
+            ycx_la, yla = self._last_yellow_lookahead
+            ylp_x = max(0, min(w - 1, int(ycx_la)))
+            ylp_y = max(0, min(h - 1, int(h - yla)))
+            cv2.circle(left, (ylp_x, ylp_y), 6, (0, 100, 255), 2)             # yellow lookahead ring
+            cv2.putText(left, f"Ylo={int(ycx_la)}", (2, 22),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 160, 215), 1)
 
         mode_col = {'WHITE': (0,255,0), 'YELLOW': (0,215,255),
                     'LOST': (0,0,255), 'INIT': (128,128,128)}.get(self._mode, (128,128,128))
@@ -325,3 +348,28 @@ class PurePursuitFollower(BaseFollower):
             cx = x0 + t * (x1 - x0)
 
         return cx - target, lookahead_px
+
+    def _update_yellow_lookahead(self, mask_y, roi_w: int, roi_h: int):
+        """
+        Scan the yellow mask in horizontal strips (same as white), find the
+        interpolated yellow-line position at the lookahead distance, and cache
+        the result as self._yellow_lookahead_cx (absolute pixel x).
+
+        This gives the emergency_handler a look-ahead cx instead of the raw
+        bottom-of-frame centroid, enabling proper oval-curve anticipation during
+        EVADING phase 2 and HOLDING.  Falls back to None (centroid used instead)
+        when yellow is not detected in enough strips.
+        """
+        points = self._scan_strips(mask_y, roi_w)
+        self._last_yellow_points = points
+
+        if not points:
+            self._yellow_lookahead_cx   = None
+            self._last_yellow_lookahead = None
+            return
+
+        lookahead_px = roi_h * self._lookahead_frac
+        # _get_lookahead returns (cx - target, ly). Pass target=0 → returns absolute cx.
+        cx_abs, ly = self._get_lookahead(points, target=0.0, lookahead_px=lookahead_px)
+        self._last_yellow_lookahead  = (cx_abs, ly)
+        self._yellow_lookahead_cx    = cx_abs

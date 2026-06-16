@@ -61,9 +61,9 @@ lane_follower:
   # Pattern: turn left → turn right (2× arm, crosses center) → return left → creep forward → repeat
   # At 0.40 rad/s × 0.8 s = 0.32 rad ≈ 18° per arm  →  total sweep ±18° from starting heading
   lost_search_delay_s:  1.5      # seconds of LOST before sweep begins (carry-wz first)
-  lost_search_turn_spd: 0.40     # rad/s for left/right sweep turns
-  lost_search_arm_s:    0.8      # seconds per half-sweep arm
-  lost_search_fwd_s:    0.4      # seconds to creep forward between sweeps
+  lost_search_turn_spd: 0.90     # rad/s for left/right sweep turns
+  lost_search_arm_s:    1.6      # seconds per half-sweep arm
+  lost_search_fwd_s:    0.8      # seconds to creep forward between sweeps
 
   # --- Pure Pursuit tuning (algorithm: pure_pursuit or recorded_path) ---
   # kpp=25 was too weak: max wz only 0.37 rad/s, robot achieved only 13% actual on curves.
@@ -308,7 +308,7 @@ emergency_handler:
   #         the STM32 IMU (gyro_z, rad/s). Falls back to timer if insufficient
   #         valid gyro samples accumulate — so this is always safe.
   #         IMU is inside the chassis near motors → use spike rejection.
-  recovery_exit_mode: gyro
+  recovery_exit_mode: timer
   recovery_target_deg: 30.0       # degrees to rotate before exiting (gyro mode)
   gyro_max_rad_s: 4.0             # spike filter — discard |gyro_z| above this
   gyro_min_samples: 3             # min valid readings before trusting accumulation

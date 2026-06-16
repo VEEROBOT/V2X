@@ -89,6 +89,10 @@ class BaseFollower(ABC):
         self._last_cx     = None   # white x-position (meaning depends on algorithm)
         self._last_ycx    = None   # yellow centroid x
 
+        # Yellow Pure Pursuit lookahead — set by subclasses that implement it
+        self._yellow_lookahead_cx: Optional[float] = None
+        self._yellow_target_frac: float = 0.70   # updated via set_yellow_target()
+
         # Current zone — updated by main_car via set_zone() each loop tick
         self._current_zone = -1
 
@@ -112,6 +116,27 @@ class BaseFollower(ABC):
     def set_zone(self, zone: int):
         """Called by main_car each loop tick so algorithms can use zone info."""
         self._current_zone = zone
+
+    def set_yellow_target(self, frac: float):
+        """
+        Set the frame-fraction where yellow should appear during evasion (0.0–1.0).
+        Should match emergency_handler.evasion_yellow_target so both controllers
+        use the same reference point.  Called once at startup from main_car.py.
+        """
+        self._yellow_target_frac = float(frac)
+
+    def get_yellow_lookahead_cx(self) -> Optional[float]:
+        """
+        Pixel x of the yellow line at the Pure Pursuit lookahead distance.
+        None if yellow was not found in the last frame.
+
+        PurePursuitFollower computes this after every process() call.
+        CentroidFollower returns None (falls back to raw centroid in main_car).
+        The emergency_handler uses this in place of the raw centroid during
+        EVADING phase 2 and HOLDING so the P-controller reacts to a look-ahead
+        point rather than the nearest yellow pixels.
+        """
+        return self._yellow_lookahead_cx
 
     def is_boundary_near(self) -> bool:
         """

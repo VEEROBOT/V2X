@@ -428,6 +428,10 @@ def main():
         gyro_min_samples       = ec.get('gyro_min_samples',       3),
     )
 
+    # Sync yellow target between handler and follower so both controllers
+    # reference the same frame fraction (default 0.70 = right side for CW inner).
+    follower.set_yellow_target(ec.get('evasion_yellow_target', 0.70))
+
     # ── Vision stream (desktop browser) ──────────────────────────────────
     sc = cfg.get('stream', {})
     streamer = None
@@ -562,11 +566,16 @@ def main():
                 vx, wz = follower.process(frame)
                 dbg = follower.get_debug_info()
                 gyro_z = _telem.get('gyro_z', 0.0) if _telem else 0.0
+                # Prefer yellow Pure Pursuit lookahead cx over raw centroid.
+                # PurePursuitFollower computes this every frame; CentroidFollower
+                # returns None (raw centroid used as fallback).
+                _yla_cx = follower.get_yellow_lookahead_cx()
+                _yellow_cx = _yla_cx if _yla_cx is not None else dbg.get('yellow_cx')
                 vx, wz = handler.process(
                     vx, wz,
                     boundary_near = follower.is_boundary_near(),
                     white_found   = (dbg.get('mode') == 'WHITE'),
-                    yellow_cx     = dbg.get('yellow_cx'),
+                    yellow_cx     = _yellow_cx,
                     outer_tag     = estimator.is_off_track(),
                     gyro_z        = gyro_z,
                 )
