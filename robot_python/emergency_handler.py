@@ -219,18 +219,18 @@ class EmergencyHandler:
         # ── EVADING ─────────────────────────────────────────────────────────
         elif self._state == _EVADING:
             past_min = elapsed >= self._ev_min
-            # Primary trigger: yellow fills bottom half of ROI (wide inner island).
-            # Secondary triggers for outer evasion (outer tape is thin — bottom-half
-            # detection fires too late):
-            #   yellow_at_tgt: yellow centroid has reached target x-position, meaning
-            #                  the robot is AT the boundary before crossing it.
-            #   outer_tag:     outer boundary AprilTag visible — belt-and-suspenders.
+            # Both inner and outer evasion use boundary_near AND yellow_at_tgt.
+            # boundary_near: yellow fills bottom half of ROI (large pixel count).
+            # yellow_at_tgt: yellow centroid reached target x — fires BEFORE crossing,
+            #                so the robot stops at the line instead of blowing through.
+            # In daylight, yellow detection can be weaker → boundary_near alone fires
+            # too late; yellow_at_tgt catches it earlier via the centroid position.
             yellow_at_tgt = (
                 yellow_cx is not None and
                 (yellow_cx / frame_w - self._ev_yellow_tgt) * self._dir * self._ev_side >= -0.05
             )
             if self._ev_side > 0:
-                boundary_hit = past_min and boundary_near
+                boundary_hit = past_min and (boundary_near or yellow_at_tgt)
             else:
                 boundary_hit = past_min and (boundary_near or outer_tag or yellow_at_tgt)
             if boundary_hit:

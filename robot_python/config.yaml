@@ -264,10 +264,11 @@ emergency_handler:
 
   # ── EVADING: robot veers toward evasion boundary ────────────────────────
   evasion_linear_speed: 0.06    # forward speed while evading (slow — turning dominates)
-  evasion_angular_speed: 0.35   # magnitude of fallback turn when no yellow visible
-                                 # 0.60 was too aggressive (inner wheel reversed, robot pivoted
-                                 # → overshot the inner island)
-  evasion_duration_s: 6.0       # backup timer if boundary_near never fires
+  evasion_angular_speed: 0.25   # magnitude of fallback turn when no yellow visible
+                                 # 0.35 overshot the inner island before boundary_near fired;
+                                 # 0.25 gives the centroid controller time to react
+  evasion_duration_s: 3.5       # backup timer if boundary_near never fires
+                                 # 6.0s at 0.35 rad/s = 120° overshoot; 3.5s at 0.25 = ~50°
   min_evasion_s: 0.2            # ignore boundary_near for first 0.2s
   # Yellow-tracking proportional control (active once yellow centroid is visible):
   #   err = yellow_cx / frame_w - evasion_yellow_target
