@@ -384,8 +384,8 @@ control:
 car:
   lane_follower:
     linear_speed: 0.08     # keep slow — more turning authority at lower speed
-    kpp: 25.0              # was 22.0 — stronger curve response (robot was going wide before turning)
-    lookahead_frac: 0.30   # was 0.45 — shorter lookahead starts the turn earlier on curves;
+    kpp: 20.0              # was 22.0 — stronger curve response (robot was going wide before turning)
+    lookahead_frac: 0.38   # was 0.45 — shorter lookahead starts the turn earlier on curves;
                             # longer lookahead smooths out curves, causing the robot to undershoot
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
@@ -395,7 +395,7 @@ car:
 
 ambulance:
   lane_follower:
-    linear_speed: 0.12     # ambulance line-follow speed — 0.18 is too fast for detection; tune up once stable
+    linear_speed: 0.10     # ambulance line-follow speed — 0.18 is too fast for detection; tune up once stable
     kpp: 20.0              # ambulance pure-pursuit gain — tune independently from car
     lookahead_frac: 0.38   # ambulance lookahead — tune independently from car
     ly_min_px: 30          # minimum lookahead floor for ambulance
