@@ -38,6 +38,10 @@ OBUEOF
 echo "[v2x] Clearing OBU keys: $KEY_DIR"
 rm -rf "$KEY_DIR"
 
+echo "[v2x] Killing any stale main_ambulance.py processes..."
+sudo pkill -f "main_ambulance.py" 2>/dev/null || true
+sleep 0.5
+
 echo "[v2x] Restarting v2x_ambulance..."
 sudo systemctl restart v2x_ambulance
 

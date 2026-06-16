@@ -37,6 +37,10 @@ OBUEOF
 echo "[v2x] Clearing OBU keys: $KEY_DIR"
 rm -rf "$KEY_DIR"
 
+echo "[v2x] Killing any stale main_car.py processes..."
+sudo pkill -f "main_car.py" 2>/dev/null || true
+sleep 0.5
+
 echo "[v2x] Restarting v2x_car..."
 sudo systemctl restart v2x_car
 
