@@ -510,17 +510,17 @@ def main():
                 own_pos  = estimator.get_position()
                 peer_pos = broadcaster.get_peer_position()
                 broadcaster.set_own_position(own_pos)
-
-                # Update emergency handler state
                 handler.update_own_position(own_pos)
                 handler.update_peer_position(peer_pos)
-                handler.update_emergency(bridge.is_emergency() or _sim_emergency)
 
                 # Odometry — non-blocking (background thread caches telemetry at 10 Hz)
                 # No-op when position_mode: tag_only (the default)
                 _telem = driver.get_telemetry()
                 if _telem is not None:
                     estimator.update_odometry(_telem, time.monotonic())
+
+            # Emergency state update — always runs when armed, independent of camera
+            handler.update_emergency(bridge.is_emergency() or _sim_emergency)
 
             # ── Zone sync — tell the follower which zone we're in ─────────
             zone = own_pos['zone'] if own_pos else -1

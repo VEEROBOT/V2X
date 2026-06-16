@@ -418,8 +418,8 @@ class EmergencyHandler:
     def _should_yield(self) -> bool:
         if not self._emergency:
             return False
-        if self._force_yield and not self._position_known():
-            return True   # solo test: A button pressed, no ambulance broadcasting
+        if self._force_yield:
+            return True   # A button: bypass all position logic unconditionally
         if not self._position_known():
             now = time.monotonic()
             if now - self._last_pos_log_t >= 5.0:

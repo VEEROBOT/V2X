@@ -108,6 +108,14 @@ def api_buffer_stats():
     return jsonify(db.get_buffer_stats())
 
 
+@app.route("/api/entity/<entity_id>", methods=["DELETE"])
+def api_delete_entity(entity_id):
+    """Delete a stale/duplicate entity registration."""
+    db.delete_entity(entity_id)
+    socketio.emit("entities_updated", db.get_all_entities())
+    return jsonify({"ok": True, "deleted": entity_id})
+
+
 @app.route("/api/entity_status", methods=["POST"])
 def api_entity_status():
     """Called by v2x_bridge heartbeat and v2x_obu_trigger to report ONLINE/OFFLINE."""

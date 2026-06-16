@@ -82,6 +82,12 @@ class Database:
         conn.commit()
         conn.close()
 
+    def delete_entity(self, entity_id):
+        conn = self._connect()
+        conn.execute("DELETE FROM entities WHERE entity_id = ?", (entity_id,))
+        conn.commit()
+        conn.close()
+
     def update_entity_status(self, entity_id, status):
         conn = self._connect()
         conn.execute(
