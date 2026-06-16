@@ -4,7 +4,7 @@
     "udp_listen_port": 5003,
     "rsu_ip": "192.168.0.103",
     "rsu_port": 5000,
-    "desktop_ip": "192.168.0.101",
+    "desktop_ip": "192.168.0.103",
     "desktop_reg_port": 8001,
     "is_emergency": false,
     "delta_ts_ms": 500,
