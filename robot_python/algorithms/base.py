@@ -39,7 +39,13 @@ class BaseFollower(ABC):
                  yellow_hsv_high: Tuple = (35, 255, 255),
                  cyan_hsv_low:    Tuple = (80,  80,  80),
                  cyan_hsv_high:   Tuple = (100, 255, 255),
+                 green_hsv_low:   Tuple = (40,  80,  80),
+                 green_hsv_high:  Tuple = (80, 255, 255),
+                 blue_hsv_low:    Tuple = (100, 80,  80),
+                 blue_hsv_high:   Tuple = (130, 255, 255),
                  yellow_repel_frac: float = 0.65,
+                 green_repel_frac:  float = 0.40,
+                 blue_repel_frac:   float = 0.40,
                  lost_linear_frac:    float = 0.50,
                  lost_stop_s:         float = 4.0,
                  no_white_stop_s:     float = 8.0,
@@ -60,7 +66,13 @@ class BaseFollower(ABC):
         self._yellow_hi       = np.array(yellow_hsv_high, dtype=np.uint8)
         self._cyan_lo         = np.array(cyan_hsv_low,    dtype=np.uint8)
         self._cyan_hi         = np.array(cyan_hsv_high,   dtype=np.uint8)
+        self._green_lo        = np.array(green_hsv_low,   dtype=np.uint8)
+        self._green_hi        = np.array(green_hsv_high,  dtype=np.uint8)
+        self._blue_lo         = np.array(blue_hsv_low,    dtype=np.uint8)
+        self._blue_hi         = np.array(blue_hsv_high,   dtype=np.uint8)
         self._repel_frac      = float(yellow_repel_frac)
+        self._green_repel     = float(green_repel_frac)
+        self._blue_repel      = float(blue_repel_frac)
         self._lost_lin_frac      = float(lost_linear_frac)
         self._lost_stop_s        = float(lost_stop_s)
         self._no_white_stop_s    = float(no_white_stop_s)
@@ -86,9 +98,14 @@ class BaseFollower(ABC):
         self._last_roi    = None
         self._last_mask_w = None
         self._last_mask_y = None
+        self._last_mask_g = None   # green shoulder mask
+        self._last_mask_b = None   # blue shoulder mask
         self._last_cx     = None   # white x-position (meaning depends on algorithm)
         self._last_ycx    = None   # yellow centroid x
         self._last_ycy: Optional[float] = None   # yellow centroid y, normalised 0=top 1=bottom
+        self._last_gcx: Optional[float] = None   # green centroid x
+        self._last_gcy: Optional[float] = None   # green centroid y, normalised 0=top 1=bottom
+        self._last_bcx: Optional[float] = None   # blue centroid x
 
         # Yellow Pure Pursuit lookahead — set by subclasses that implement it
         self._yellow_lookahead_cx: Optional[float] = None
@@ -213,24 +230,42 @@ class BaseFollower(ABC):
         """
         Return (white_mask, yellow_mask).
         yellow_mask includes cyan range — catches yellow tape that AWB shifts to teal.
-        Stores results in _last_mask_w / _last_mask_y for get_roi_panels().
+        Also detects green (outer shoulder) and blue (inner shoulder) and caches
+        their centroids in _last_gcx/_last_gcy and _last_bcx.
+        Stores all results for get_roi_panels().
         """
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         mw  = cv2.inRange(hsv, self._white_lo,  self._white_hi)
         my  = cv2.inRange(hsv, self._yellow_lo, self._yellow_hi)
         mc  = cv2.inRange(hsv, self._cyan_lo,   self._cyan_hi)
+        mg  = cv2.inRange(hsv, self._green_lo,  self._green_hi)
+        mb  = cv2.inRange(hsv, self._blue_lo,   self._blue_hi)
         self._last_mask_w = mw
         self._last_mask_y = my | mc
+        self._last_mask_g = mg
+        self._last_mask_b = mb
+        # Compute green/blue centroids eagerly so subclasses can read them directly.
+        self._last_gcx, self._last_gcy = self._color_centroid(mg)
+        self._last_bcx, _              = self._color_centroid(mb)
         return mw, my | mc
 
-    def _yellow_centroid(self, mask) -> Optional[float]:
-        """Uniform-weight centroid for yellow — computes both x and y positions."""
+    def _color_centroid(self, mask) -> Tuple[Optional[float], Optional[float]]:
+        """
+        Uniform-weight centroid for any single-channel mask.
+        Returns (cx, cy_frac) where cy_frac is normalised 0=top 1=bottom.
+        Returns (None, None) when the blob is too small.
+        """
         m = cv2.erode(mask, None, iterations=1)
         m = cv2.dilate(m,   None, iterations=2)
         M = cv2.moments(m)
         if M['m00'] < self._min_area * 10:
-            self._last_ycy = None
-            return None
+            return None, None
         roi_h = mask.shape[0]
-        self._last_ycy = M['m01'] / M['m00'] / roi_h if roi_h > 0 else None
-        return M['m10'] / M['m00']
+        cy_frac = M['m01'] / M['m00'] / roi_h if roi_h > 0 else None
+        return M['m10'] / M['m00'], cy_frac
+
+    def _yellow_centroid(self, mask) -> Optional[float]:
+        """Uniform-weight centroid for yellow — computes both x and y positions."""
+        cx, cy = self._color_centroid(mask)
+        self._last_ycy = cy
+        return cx

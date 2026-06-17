@@ -249,6 +249,8 @@ class EmergencyHandler:
                 white_found:    bool            = False,
                 yellow_cx:      Optional[float] = None,
                 yellow_cy_frac: Optional[float] = None,
+                green_cx:       Optional[float] = None,
+                green_cy_frac:  Optional[float] = None,
                 frame_w:        int             = 320,
                 outer_tag:      bool            = False,
                 gyro_z:         float           = 0.0,
@@ -256,16 +258,16 @@ class EmergencyHandler:
         """
         Call at ~20 Hz.  Returns (vx, wz) to send to robot driver.
 
-        boundary_near   — True when yellow tape is dense in the bottom quarter of the ROI;
-                          triggers HOLDING (only after min_evasion_s in EVADING).
+        boundary_near   — True when yellow tape is dense in the bottom quarter of the ROI.
         white_found     — True when the lane follower has re-acquired the white line.
-        yellow_cx       — pixel X of yellow at the Pure Pursuit lookahead distance (None if
-                          not seen). Used for proportional steering in EVADING phase 2 and HOLDING.
-        yellow_cy_frac  — normalised vertical centroid of the yellow blob: 0.0 = top of ROI
-                          (yellow is far ahead, robot approaching tape perpendicularly),
-                          1.0 = bottom (yellow is close alongside the robot).
-                          Used to distinguish "yellow at top → turn left to align" from
-                          "yellow on right → follow it".
+        yellow_cx       — pixel X of yellow at the lookahead distance (None if not seen).
+                          During outer evasion: yellow = DANGER (robot overshot the green
+                          hold line and is approaching the outer boundary). Hard turn back.
+        yellow_cy_frac  — normalised vertical centroid of yellow (0=top/far, 1=bottom/near).
+        green_cx        — pixel X of the GREEN shoulder line at the lookahead distance.
+                          During outer evasion: this is the PRIMARY HOLD TARGET. The robot
+                          steers to keep the green line on the evasion side of the frame.
+        green_cy_frac   — normalised vertical centroid of green (0=top/far, 1=bottom/near).
         frame_w         — camera frame width in pixels (default 320).
         outer_tag       — True when an outer boundary AprilTag was detected.
         gyro_z          — yaw-rate from STM32 IMU in rad/s (positive = left turn).
@@ -336,17 +338,15 @@ class EmergencyHandler:
                 return self._ev_linear, ev_wz
 
             # ===== OUTER evasion (toward outer boundary) =====
-            # Steer toward the outer boundary and follow it (see _outer_steer).
-            # EVADING → HOLDING once the robot is established parallel to the
-            # boundary with yellow held on the evasion side, OR via the dense
-            # boundary / outer-AprilTag / timer fallbacks.
+            # Robot steers toward the GREEN shoulder line and holds beside it.
+            # Yellow seen during evasion = overshot → danger handled inside _outer_steer.
             ev_vx, ev_wz, established = self._outer_steer(
-                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear,
+                green_cx, green_cy_frac, yellow_cx, frame_w, self._ev_linear,
                 boundary_near=boundary_near)
-            if past_min and (established or boundary_near or outer_tag):
-                logger.info("EVADING → HOLDING: outer boundary reached "
-                            "(established=%s boundary_near=%s outer_tag=%s, %.1fs)",
-                            established, boundary_near, outer_tag, elapsed)
+            if past_min and (established or outer_tag):
+                logger.info("EVADING → HOLDING: green line established "
+                            "(established=%s outer_tag=%s, %.1fs)",
+                            established, outer_tag, elapsed)
                 self._enter(_HOLDING, now)
             elif elapsed >= self._ev_dur:
                 logger.info("EVADING → HOLDING: evasion timer expired")
@@ -377,11 +377,10 @@ class EmergencyHandler:
                                                  rescue_wz=self._dir * self._ev_side * 0.10)
                 return hold_vx, hold_wz
 
-            # Outer evasion: keep driving ALONG the outer yellow boundary (yellow
-            # held on the evasion side, never centred, never crossed) while the
-            # ambulance passes.  Same controller as the EVADING approach.
+            # Outer evasion: keep driving ALONG the green shoulder line while
+            # ambulance passes.  Yellow = danger (overshot), handled inside.
             hold_vx, hold_wz, _ = self._outer_steer(
-                yellow_cx, yellow_cy_frac, frame_w, self._ev_linear,
+                green_cx, green_cy_frac, yellow_cx, frame_w, self._ev_linear,
                 boundary_near=boundary_near)
             return hold_vx, hold_wz
 
@@ -431,16 +430,16 @@ class EmergencyHandler:
                 seek_wz = max(-self._rec_white_max, min(self._rec_white_max, seek_wz))
                 return self._rec_linear, seek_wz
 
-            # No white yet.  ANTI-CROSS: if the outer boundary is still right
-            # ahead/under the nose (dense yellow, or yellow high in the frame),
-            # rotate INWARD almost in place instead of driving forward into it —
-            # otherwise the forward arc noses across the outer line and leaves the
-            # arena (exactly the failure seen in the field).  Only once the
-            # boundary is no longer ahead do we arc forward to go find the lane.
+            # No white yet.  ANTI-CROSS: if the outer boundary (yellow) or the
+            # green shoulder line is still right ahead/under the nose, rotate
+            # INWARD almost in place before arcing forward — otherwise the forward
+            # arc noses across the outer line and leaves the arena.
+            yellow_ahead = (yellow_cx is not None and yellow_cy_frac is not None
+                            and yellow_cy_frac < self._outer_perp_cy)
+            green_ahead  = (green_cx is not None and green_cy_frac is not None
+                            and green_cy_frac < self._outer_perp_cy)
             boundary_ahead = (self._ev_side < 0 and
-                              (boundary_near or
-                               (yellow_cx is not None and yellow_cy_frac is not None
-                                and yellow_cy_frac < self._outer_perp_cy)))
+                              (boundary_near or yellow_ahead or green_ahead))
             if boundary_ahead:
                 return self._cross_guard_vx, self._rec_angular
             return self._rec_linear, self._rec_angular
@@ -490,96 +489,89 @@ class EmergencyHandler:
         lo, hi = min(max_toward, max_ease), max(max_toward, max_ease)
         return max(lo, min(hi, wz))
 
-    def _outer_steer(self, yellow_cx: Optional[float],
-                     yellow_cy_frac: Optional[float],
+    def _outer_steer(self, green_cx: Optional[float],
+                     green_cy_frac: Optional[float],
+                     yellow_cx: Optional[float],
                      frame_w: int, base_vx: float,
                      boundary_near: bool = False) -> Tuple[float, float, bool]:
         """
         OUTER-boundary follow controller — used in EVADING (approach) and HOLDING.
 
-        Goal: keep the OUTER yellow boundary on the evasion side of the frame
-        (clockwise → LEFT, rel ≈ _ev_yellow_tgt = 0.30) while driving forward,
-        never letting yellow reach the centre and never crossing it (so the
-        robot stays inside the arena).  Only one track line is visible at a
-        time, so during outer evasion the only yellow encountered is the outer
-        boundary — the inner island is never in view here.
+        GREEN line = the outer shoulder marker (halfway between white and outer yellow).
+        This is the SAFE HOLD TARGET — the robot drives to it and tracks beside it.
+
+        YELLOW = DANGER — the robot has overshot the green line and is near the outer
+        boundary.  Hard turn back into the arena immediately.
 
         Returns (vx, wz, established):
-            established — True once the robot is parallel to the boundary with
-            yellow held on the evasion side; used to advance EVADING → HOLDING.
+            established — True once the robot is parallel to the green line with it
+            held on the evasion side; used to advance EVADING → HOLDING.
 
         Sign convention: wz > 0 = LEFT.  toward_outer = +self._dir
             clockwise   (_dir=+1): toward_outer = +1 → LEFT  is toward the outer boundary
             counter-cw  (_dir=-1): toward_outer = -1 → RIGHT is toward the outer boundary
         """
         toward_outer = float(self._dir)      # CW(+1): left is toward outer boundary
-        target       = self._ev_yellow_tgt   # CW outer → 0.30 (evasion-side third)
+        target       = self._ev_yellow_tgt   # CW outer → 0.30 (evasion-side third of frame)
 
-        # KEY SAFETY RULE: once the boundary is in view, the robot only ever turns
-        # AWAY from it (into the arena) or drives straight — it never turns toward
-        # the boundary.  That makes it physically unable to drive across the outer
-        # line, and removes the old failure where a far-left yellow lookahead made
-        # the robot creep LEFT over the tape.  `turn_away >= 0` is the magnitude of
-        # the into-arena turn; the final wz is -toward_outer * turn_away.
-
-        # Latch the boundary the first time we actually see yellow this episode.
+        # ── DANGER: yellow detected → robot overshot the green line ──────────
+        # Yellow during evasion means we are approaching the outer boundary itself.
+        # Drop forward speed to near zero and rotate hard back into the arena.
         if yellow_cx is not None:
-            self._outer_yellow_seen = True
+            logger.warning("Outer evasion: YELLOW detected during evasion — overshot green line, retreating")
+            return self._cross_guard_vx, -toward_outer * self._outer_centre_turn, False
 
-        # (1) No yellow detected this frame.
-        if yellow_cx is None:
+        # Latch: once green has been seen this episode, we know the shoulder line
+        # exists and the robot is roughly in the right zone.
+        if green_cx is not None:
+            self._outer_yellow_seen = True   # reusing the latch flag for "green seen"
+
+        # (1) No green detected this frame.
+        if green_cx is None:
             if self._outer_yellow_seen:
-                # We were tracking the boundary and the detector dropped it — it
-                # almost certainly swung up into the cropped top of the frame as we
-                # squared up to it (perpendicular on a curve), or just blinked.
-                # NEVER arc back toward it; ease AWAY into the arena at reduced
-                # speed until it reappears, so we cannot creep across the line.
+                # We were tracking the green line and the detector dropped it —
+                # probably swung into the top of the frame on a curve, or blinked.
+                # Ease AWAY from the boundary (into the arena) slowly until it
+                # reappears.  Never arc further outward while blind.
                 return base_vx * 0.5, -toward_outer * self._outer_perp_turn, False
-            # Initial approach, boundary not found yet → arc toward it to go find it.
+            # Haven't found green yet — arc toward the outer shoulder to find it.
             return base_vx, toward_outer * abs(self._ev_angular), False
 
-        rel      = yellow_cx / float(frame_w)
-        e_away   = (rel - target) * toward_outer        # >0 = yellow drifting toward centre
-        crossed  = (rel - 0.50) * toward_outer > 0.0    # yellow past centre on the cross side
+        rel      = green_cx / float(frame_w)
+        e_away   = (rel - target) * toward_outer   # >0 = green drifting toward centre (too far in)
+        crossed  = (rel - 0.50) * toward_outer > 0.0   # green past centre on the arena side
         near_ctr = abs(rel - 0.50) < self._outer_centre_guard
-        perp     = (yellow_cy_frac is not None and yellow_cy_frac < self._outer_perp_cy)
+        perp     = (green_cy_frac is not None and green_cy_frac < self._outer_perp_cy)
 
-        # (2) About to leave / leaving the arena → turn back inside.  If the tape
-        #     is right under the nose (boundary_near) or already across centre,
-        #     nearly STOP forward motion and rotate in place so the robot cannot
-        #     translate across the outer line while it is turning away.
-        if boundary_near or crossed or near_ctr:
-            vx = self._cross_guard_vx if (boundary_near or crossed) else base_vx * 0.5
-            return vx, -toward_outer * self._outer_centre_turn, False
+        # (2) Green has drifted past centre — robot is turning too far into the
+        #     arena. Rotate back out toward the shoulder line.
+        if crossed or near_ctr:
+            vx = base_vx * 0.5 if near_ctr else self._cross_guard_vx
+            return vx, toward_outer * self._outer_centre_turn, False
 
-        # (3) Perpendicular approach: yellow lies across the TOP of the frame
-        #     (robot heading head-on into the boundary, typically on a curve).
-        #     Turn into the arena so the line swings down to the evasion side and
-        #     the robot lines up parallel.  Slowed so it does not cross meanwhile.
+        # (3) Perpendicular: green lies across the TOP of the frame (robot heading
+        #     directly toward the outer shoulder on a curve). Turn into the arena
+        #     so the green line swings down to the evasion side and the robot
+        #     aligns parallel. Slowed to avoid overshooting.
         if perp:
             return base_vx * 0.6, -toward_outer * self._outer_perp_turn, False
 
-        # (4) Yellow alongside but drifting toward centre → ease back into the
-        #     arena, proportional to how far it has encroached past the target.
+        # (4) Green drifting toward centre (too far into the arena from shoulder).
+        #     Ease back out toward the boundary proportionally.
         if e_away > self._outer_est_tol:
-            turn_away = min(self._outer_follow_kp * (e_away - self._outer_est_tol),
-                            self._outer_max_away)
-            return base_vx, -toward_outer * turn_away, False
+            turn_toward = min(self._outer_follow_kp * (e_away - self._outer_est_tol),
+                              self._outer_max_away * 0.6)
+            return base_vx, toward_outer * turn_toward, False
 
-        # (5) Yellow on the evasion side.  If it has drifted out toward the
-        #     evasion-side EDGE of the frame (about to leave view), apply a GENTLE
-        #     turn TOWARD the boundary to pull it back — this is what makes the
-        #     robot actually FOLLOW the yellow line instead of slowly drifting
-        #     inward, losing it, and wandering off to the inner island.  Safe:
-        #     yellow here is well past centre on the evasion side, and every
-        #     dangerous case (boundary_near / crossed / near-centre) is
-        #     hard-guarded above and re-checked every frame, so a toward-turn can
-        #     never carry the robot across the line.
+        # (5) Green drifting toward the evasion-side edge (too close to outer boundary).
+        #     Ease gently back into the arena.
         if e_away < -self._outer_est_tol:
-            turn_toward = min(self._outer_follow_kp * (-e_away - self._outer_est_tol),
-                              self._outer_max_away * 0.6)   # gentler toward than away
-            return base_vx, toward_outer * turn_toward, True
-        # Comfortably on target → drive straight (parallel follow).
+            turn_away = min(self._outer_follow_kp * (-e_away - self._outer_est_tol),
+                            self._outer_max_away)
+            return base_vx, -toward_outer * turn_away, True
+
+        # (6) Green sitting comfortably on the evasion side at the target fraction.
+        #     Drive straight — established parallel hold.
         return base_vx, 0.0, True
 
     def _enter(self, state: str, now: float):

@@ -73,6 +73,11 @@ class PurePursuitFollower(BaseFollower):
         self._last_yellow_points:    List[Tuple[float, float]] = []
         self._last_yellow_lookahead: Optional[Tuple[float, float]] = None  # (cx_at_lookahead, ly)
 
+        # Green (outer shoulder) lookahead — used by emergency handler during evasion
+        self._green_lookahead_cx: Optional[float] = None
+        self._last_green_points:  List[Tuple[float, float]] = []
+        self._last_green_lookahead: Optional[Tuple[float, float]] = None
+
     # ── Public API ───────────────────────────────────────────────────────────
     def get_mode(self) -> str:
         return self._mode
@@ -89,13 +94,16 @@ class PurePursuitFollower(BaseFollower):
             white_err = None
             ly_px     = None
         return {
-            'mode':          self._mode,
-            'white_err':     white_err,
-            'ly_px':         ly_px,
-            'n_strips':      self._last_n_strips,
-            'last_wz':       round(self._last_wz, 3),
-            'yellow_cx':     self._last_ycx,
-            'yellow_cy_frac': self._last_ycy,   # 0.0=top(far/ahead), 1.0=bottom(near/alongside)
+            'mode':           self._mode,
+            'white_err':      white_err,
+            'ly_px':          ly_px,
+            'n_strips':       self._last_n_strips,
+            'last_wz':        round(self._last_wz, 3),
+            'yellow_cx':      self._last_ycx,
+            'yellow_cy_frac': self._last_ycy,    # 0.0=top(far/ahead), 1.0=bottom(near/alongside)
+            'green_cx':       self._last_gcx,    # green shoulder line centroid x (raw)
+            'green_cy_frac':  self._last_gcy,    # green cy normalised
+            'blue_cx':        self._last_bcx,    # blue shoulder line centroid x
         }
 
     def process(self, frame) -> Tuple[float, float]:
@@ -103,7 +111,7 @@ class PurePursuitFollower(BaseFollower):
         roi   = frame[int(h * self._crop_top):, :]
         self._last_roi = roi
 
-        mask_w, mask_y = self._compute_masks(roi)
+        mask_w, mask_y = self._compute_masks(roi)   # also sets _last_mask_g/b, _last_gcx/gcy/bcx
         yellow_cx = self._yellow_centroid(mask_y)
         self._last_ycx = yellow_cx
 
@@ -115,6 +123,9 @@ class PurePursuitFollower(BaseFollower):
         # Yellow Pure Pursuit lookahead — updated every frame so the emergency
         # handler gets a look-ahead cx instead of the raw bottom-of-frame centroid.
         self._update_yellow_lookahead(mask_y, roi_w, roi_h)
+
+        # Green shoulder lookahead — for emergency handler during outer evasion.
+        self._update_green_lookahead(roi_w, roi_h)
 
         # Scan the white mask in horizontal strips
         points = self._scan_strips(mask_w, roi_w)
@@ -219,7 +230,7 @@ class PurePursuitFollower(BaseFollower):
             vx_cmd = self._linear_speed * (1.0 - 0.40 * err_ratio)
             return vx_cmd, wz
 
-        # ── Priority 2: yellow boundary — repel ─────────────────────────────
+        # ── Priority 2: yellow boundary — strong repel (hard wall) ──────────
         if yellow_cx is not None:
             self._lost_start = None
             self._mode = 'YELLOW'
@@ -231,7 +242,34 @@ class PurePursuitFollower(BaseFollower):
             self._last_wz = wz
             return self._linear_speed * 0.5, wz
 
-        # ── Priority 3: LOST — carry last steering, then active search sweep ──
+        # ── Priority 3: green shoulder — gentle outward repel ────────────────
+        # Green is between the white line and the outer yellow boundary.  Seeing
+        # it during normal follow means the robot is drifting outward — steer back
+        # toward white.  Weaker than yellow: green is a warning, not a hard wall.
+        if self._last_gcx is not None:
+            self._lost_start = None
+            self._mode = 'WHITE'   # still white-ish driving, just correcting
+            self._prev_error = 0.0
+            self._integral   = 0.0
+            wz = float(np.sign(self._last_gcx - target) * self._max_angular * self._green_repel)
+            wz = float(np.clip(wz, -self._max_angular, self._max_angular))
+            self._last_wz = wz
+            return self._linear_speed * 0.7, wz
+
+        # ── Priority 4: blue shoulder — gentle inward repel ──────────────────
+        # Blue is between the white line and the inner yellow boundary.  Seeing
+        # it means the robot is drifting toward the inner island — steer back out.
+        if self._last_bcx is not None:
+            self._lost_start = None
+            self._mode = 'WHITE'
+            self._prev_error = 0.0
+            self._integral   = 0.0
+            wz = float(np.sign(self._last_bcx - target) * self._max_angular * self._blue_repel)
+            wz = float(np.clip(wz, -self._max_angular, self._max_angular))
+            self._last_wz = wz
+            return self._linear_speed * 0.7, wz
+
+        # ── Priority 5: LOST — carry last steering, then active search sweep ──
         if self._lost_start is None:
             self._lost_start = now
         self._mode = 'LOST'
@@ -308,11 +346,25 @@ class PurePursuitFollower(BaseFollower):
         cv2.putText(left, f"PURSUIT {self._mode}", (2, h - 3),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.3, mode_col, 1)
 
+        # Green lookahead overlay
+        for row_from_bottom, cx in self._last_green_points:
+            row_from_top = int(h - row_from_bottom)
+            cv2.circle(left, (int(cx), row_from_top), 2, (0, 200, 0), -1)
+        if self._last_green_lookahead is not None:
+            gcx_la, gla = self._last_green_lookahead
+            glp_x = max(0, min(w - 1, int(gcx_la)))
+            glp_y = max(0, min(h - 1, int(h - gla)))
+            cv2.circle(left, (glp_x, glp_y), 6, (0, 200, 0), 2)
+
         right = np.zeros_like(roi)
         if self._last_mask_w is not None:
             right[self._last_mask_w > 0] = (220, 220, 220)
         if self._last_mask_y is not None:
             right[self._last_mask_y > 0] = (0, 215, 255)
+        if self._last_mask_g is not None:
+            right[self._last_mask_g > 0] = (0, 200, 0)
+        if self._last_mask_b is not None:
+            right[self._last_mask_b > 0] = (255, 100, 0)
         cv2.putText(right, "HSV MASK", (2, h - 3),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
 
@@ -417,3 +469,38 @@ class PurePursuitFollower(BaseFollower):
         cx_abs, ly = self._get_lookahead(points, target=0.0, lookahead_px=lookahead_px)
         self._last_yellow_lookahead  = (cx_abs, ly)
         self._yellow_lookahead_cx    = cx_abs
+
+    def _update_green_lookahead(self, roi_w: int, roi_h: int):
+        """
+        Scan the green mask in horizontal strips to find the green shoulder line's
+        lookahead cx. Called every frame; result cached in _green_lookahead_cx for
+        the emergency handler to use during outer evasion.
+        """
+        if self._last_mask_g is None:
+            self._green_lookahead_cx   = None
+            self._last_green_lookahead = None
+            self._last_green_points    = []
+            return
+
+        points = self._scan_strips(self._last_mask_g, roi_w)
+        self._last_green_points = points
+
+        if not points:
+            self._green_lookahead_cx   = None
+            self._last_green_lookahead = None
+            return
+
+        # Vertical position of green line (same method as yellow)
+        mean_row = sum(r for r, _ in points) / len(points)
+        self._last_gcy = max(0.0, min(1.0, 1.0 - mean_row / float(roi_h)))
+        # Cache updated value so get_debug_info sees the strip-based cy_frac
+        self._last_gcy = self._last_gcy
+
+        lookahead_px = roi_h * self._lookahead_frac
+        cx_abs, ly   = self._get_lookahead(points, target=0.0, lookahead_px=lookahead_px)
+        self._last_green_lookahead = (cx_abs, ly)
+        self._green_lookahead_cx   = cx_abs
+
+    def get_green_lookahead_cx(self) -> Optional[float]:
+        """Pixel x of the green shoulder line at the lookahead distance. None if not seen."""
+        return self._green_lookahead_cx

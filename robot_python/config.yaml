@@ -77,11 +77,11 @@ lane_follower:
   #   strip centroids). Makes the robot start curves earlier instead of drifting
   #   wide then correcting late. 0 = disabled. Raise if it still turns late;
   #   lower if it oversteers/weaves on straights. Typical 0.3–0.8.
-  heading_kp: 0.0
+  heading_kp: 0.45
   # gyro_hold_kp: while the white line is briefly lost (dash gaps / glare), hold
   #   the last good turn-rate closed-loop on the IMU yaw-rate instead of replaying
   #   it open-loop. 0 = disabled. Typical 0.4–0.8.
-  gyro_hold_kp: 0.0
+  gyro_hold_kp: 0.5
   gyro_max_rad_s: 4.0            # reject IMU spikes above this (EMI near motors)
 
   # --- Recorded Path — Learning from Demonstration ---
@@ -216,11 +216,32 @@ lane_follower:
   cyan_v_low:   80     # keep in sync with yellow_v_low
   cyan_v_high: 255     # keep 255
 
+  # Green shoulder line (outer evasion hold target — halfway between outer yellow and white)
+  # Robot TARGETS this during outer evasion; seeing yellow means it overshot.
+  # During normal following: green visible → drifting outward warning (gentle repel).
+  green_h_low:   40    # pure green starts well above yellow (35) — no overlap
+  green_h_high:  80    # upper limit before cyan starts
+  green_s_low:   80    # must be saturated — floor reflections are low-S
+  green_s_high: 255
+  green_v_low:   80
+  green_v_high: 255
+  green_repel_frac: 0.40   # weaker than yellow (0.65) — green is a warning, not a hard wall
+
+  # Blue shoulder line (inner warning — halfway between white and inner yellow)
+  # During normal following: blue visible → drifting inward warning (gentle repel).
+  blue_h_low:  100
+  blue_h_high: 130
+  blue_s_low:   80
+  blue_s_high: 255
+  blue_v_low:   80
+  blue_v_high: 255
+  blue_repel_frac: 0.40    # same gentle repel as green
+
 
 # ── AprilTag Position Estimator ───────────────────────────────────────────────
 position:
   n_inner_tags: 10               # IDs 0-9 on the inner white oval
-  n_outer_tags: 8                # IDs 10-17 on the outer boundary
+  n_outer_tags: 10               # IDs 10-19 on the outer boundary
   tag_spacing_m: 0.70            # distance between adjacent tags (m)
   tag_size_m: 0.10               # printed tag outer size (m)
   focal_px: 264.0                # camera focal length in pixels (320px wide IMX219)
@@ -248,7 +269,7 @@ position:
   #   left straight  10->0  11->1  12->2     right straight 14->5 15->6 16->7
   #   top-center 13 sits between inner 3 & 4 -> 4 ; bottom-center 17 between 8 & 9 -> 9
   #   (inner zones 3 and 8 have no outer counterpart — outer ring has 8 tags vs 10 inner)
-  outer_zone_map: {10: 0, 11: 1, 12: 2, 13: 4, 14: 5, 15: 6, 16: 7, 17: 9}
+  outer_zone_map: {10: 0, 11: 1, 12: 2, 13: 3, 14: 4, 15: 5, 16: 6, 17: 7, 18: 8, 19: 9}
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -321,17 +342,17 @@ emergency_handler:
   evasion_yellow_kp: 2.5        # gain per frame-width fraction (2.5 × 0.20 err = 0.50 wz)
 
   # ── OUTER evasion follow tuning (only used when evasion_side: outer) ──────
-  # The robot steers toward the outer yellow boundary and follows it, keeping
-  # yellow on the evasion side (LEFT for clockwise, rel≈0.30). SAFETY RULE: once
-  # yellow is in view the robot only ever turns AWAY from the boundary (into the
-  # arena) or drives straight — it never turns toward it, so it cannot drive
-  # across the outer line. Behaviour:
-  #   • no yellow yet            → arc left-forward until the boundary is found
-  #   • yellow near/over centre  → about to cross: hard RIGHT back into the arena
-  #   • yellow at TOP of frame   → perpendicular approach (curve): turn RIGHT to
-  #                                 swing the line down to the left and go parallel
-  #   • yellow drifting to centre→ ease RIGHT proportional to encroachment
-  #   • yellow resting on LEFT   → drive straight (parallel follow, stays inside)
+  # The robot steers toward the GREEN outer shoulder line and holds beside it.
+  # The green line is the SAFE hold target (halfway between outer yellow and white).
+  # Yellow during evasion = DANGER (robot has overshot the green line toward the
+  # outer boundary) → hard turn back into the arena.
+  # Behaviour:
+  #   • no green yet             → arc left-forward to find the green shoulder line
+  #   • yellow detected          → overshot: hard RIGHT back into arena immediately
+  #   • green at TOP of frame    → perpendicular approach (curve): turn RIGHT to align
+  #   • green drifting to centre → ease RIGHT to hold it on the evasion side
+  #   • green on evasion side    → drive forward tracking it (parallel hold)
+  #   • green drifting off edge  → gentle LEFT to pull it back into view
   outer_perp_cy:       0.45     # yellow_cy_frac below this = "yellow at top" (perpendicular)
   outer_perp_turn:     0.30     # rad/s into-arena turn to align when perpendicular
   outer_centre_guard:  0.10     # |rel-0.5| below this = "near centre" → anti-cross hard turn
@@ -402,7 +423,7 @@ joystick:
   train_button:       2          # press X to start/stop training recording
 
   # --- Speed limits ---
-  max_speed:    0.22             # m/s — full stick forward (normal); turbo for faster
+  max_speed:    0.30             # m/s — full stick forward (normal)
   turbo_speed:  0.60             # m/s — full stick forward in turbo mode
   max_steering: 1.20             # rad/s — full stick sideways
 
@@ -422,9 +443,9 @@ control:
 car:
   lane_follower:
     linear_speed: 0.08     # keep slow — more turning authority at lower speed
-    kpp: 20.0              # car pure-pursuit steering gain
-    lookahead_frac: 0.34   # slightly closer than 0.38 → starts the curve a touch
-                            # earlier to curb overshoot, without the 0.28 oscillation
+    kpp: 20.0              # was 22.0 — stronger curve response (robot was going wide before turning)
+    lookahead_frac: 0.38   # was 0.45 — shorter lookahead starts the turn earlier on curves;
+                            # longer lookahead smooths out curves, causing the robot to undershoot
     ly_min_px: 30          # minimum lookahead floor for car
   v2x_bridge:
     obu_loop_count: 1      # car authenticates once then listens for alerts

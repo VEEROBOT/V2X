@@ -582,17 +582,22 @@ def main():
                 follower.set_gyro(gyro_z)   # for gyro heading-hold while line is lost
                 vx, wz = follower.process(frame)
                 dbg = follower.get_debug_info()
-                # Prefer yellow Pure Pursuit lookahead cx over raw centroid.
-                # PurePursuitFollower computes this every frame; CentroidFollower
-                # returns None (raw centroid used as fallback).
-                _yla_cx = follower.get_yellow_lookahead_cx()
+                # Prefer Pure Pursuit lookahead cx over raw centroid for yellow.
+                _yla_cx    = follower.get_yellow_lookahead_cx()
                 _yellow_cx = _yla_cx if _yla_cx is not None else dbg.get('yellow_cx')
+                # Green: prefer strip-based lookahead cx if available (PurePursuit),
+                # fall back to raw centroid for other followers.
+                _gla_cx = (follower.get_green_lookahead_cx()
+                           if hasattr(follower, 'get_green_lookahead_cx') else None)
+                _green_cx = _gla_cx if _gla_cx is not None else dbg.get('green_cx')
                 vx, wz = handler.process(
                     vx, wz,
                     boundary_near   = follower.is_boundary_near(),
                     white_found     = (dbg.get('mode') == 'WHITE'),
                     yellow_cx       = _yellow_cx,
                     yellow_cy_frac  = dbg.get('yellow_cy_frac'),
+                    green_cx        = _green_cx,
+                    green_cy_frac   = dbg.get('green_cy_frac'),
                     outer_tag       = estimator.is_off_track(),
                     gyro_z          = gyro_z,
                     white_err       = dbg.get('white_err'),
