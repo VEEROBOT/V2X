@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/veerobot/projects/V2X/robot_python/.venv/bin/python3
 """
 color_sample.py — Sample the robot camera and check against detection thresholds.
 
