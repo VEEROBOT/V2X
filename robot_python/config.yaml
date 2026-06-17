@@ -135,7 +135,7 @@ lane_follower:
   #   0        = well-lit room (default)
   #   20 – 30  = dim indoor / overcast
   #   40 – 50  = dark room / low-power LEDs
-  brightness_offset: 30          # current room is dim — lowers all V_low thresholds by 30
+  brightness_offset: 40          # current room is dim — lowers all V_low thresholds by 30
 
   # ┌─────────────────────────────────────────────────────────────────────────┐
   # │  HSV COLOUR THRESHOLDS  —  tune here when changing location/lighting    │
@@ -205,7 +205,7 @@ lane_follower:
   white_h_low:   0     # keep 0 — white has no hue, accept all colours
   white_h_high: 180    # keep 180 — white has no hue, accept all colours
   white_s_low:   0     # keep 0 — white is fully desaturated (S near zero)
-  white_s_high:  70    # max saturation to count as white — lower if coloured floor leaks in (try 50)
+  white_s_high:  55    # max saturation to count as white — measured green shoulder S=64, white tape S=24; 55 cleanly separates them
   white_v_low:  100    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
                        # Lowered 150→100: sampled white tape reads V≈109 under indoor LED — 150 was missing most of it
   white_v_high: 255    # keep 255 — always accept the brightest whites
@@ -238,7 +238,7 @@ lane_follower:
   # outside green range and triggers the yellow DANGER path, not the green target path.
   green_h_low:   40    # measured green shoulder: H≈56; start below for margin
   green_h_high:  62    # was 80 — narrowed to stay below new yellow range (H:60+)
-  green_s_low:   80    # must be saturated — floor reflections are low-S
+  green_s_low:   50    # measured green shoulder S=64 mean; lowered from 80 which was rejecting ~60% of pixels
   green_s_high: 255
   green_v_low:   80
   green_v_high: 255
