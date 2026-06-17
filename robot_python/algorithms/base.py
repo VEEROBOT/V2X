@@ -54,6 +54,7 @@ class BaseFollower(ABC):
                  lost_search_turn_spd:float = 0.40,
                  lost_search_arm_s:   float = 0.8,
                  lost_search_fwd_s:   float = 0.4,
+                 white_v_auto:        bool  = True,
                  debug:               bool  = False):
 
         self._linear_speed    = linear_speed
@@ -74,6 +75,7 @@ class BaseFollower(ABC):
         self._green_hi        = np.array(green_hsv_high,  dtype=np.uint8)
         self._blue_lo         = np.array(blue_hsv_low,    dtype=np.uint8)
         self._blue_hi         = np.array(blue_hsv_high,   dtype=np.uint8)
+        self._white_v_auto    = bool(white_v_auto)
         self._repel_frac      = float(yellow_repel_frac)
         self._green_repel     = float(green_repel_frac)
         self._blue_repel      = float(blue_repel_frac)
@@ -239,7 +241,17 @@ class BaseFollower(ABC):
         Stores all results for get_roi_panels().
         """
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mw  = cv2.inRange(hsv, self._white_lo,  self._white_hi)
+        if self._white_v_auto:
+            v   = hsv[:, :, 2]
+            # 30th-percentile ≈ track-surface brightness; 90th ≈ white-tape brightness.
+            # Threshold halfway between them adapts to any lighting level automatically.
+            v_floor = float(np.percentile(v, 30))
+            v_peak  = float(np.percentile(v, 90))
+            v_low   = int(max(60, min(230, 0.5 * v_floor + 0.5 * v_peak)))
+            white_lo = np.array([self._white_lo[0], self._white_lo[1], v_low], dtype=np.uint8)
+        else:
+            white_lo = self._white_lo
+        mw  = cv2.inRange(hsv, white_lo, self._white_hi)
         my  = cv2.inRange(hsv, self._yellow_lo, self._yellow_hi)
         mc  = cv2.inRange(hsv, self._cyan_lo,   self._cyan_hi)
         mg  = cv2.inRange(hsv, self._green_lo,  self._green_hi)

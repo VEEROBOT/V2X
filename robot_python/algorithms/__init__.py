@@ -69,6 +69,7 @@ def create_follower(lc: dict, debug: bool = False):
         lost_search_turn_spd = lc.get('lost_search_turn_spd',   0.40),
         lost_search_arm_s    = lc.get('lost_search_arm_s',      0.8),
         lost_search_fwd_s    = lc.get('lost_search_fwd_s',      0.4),
+        white_v_auto         = lc.get('white_v_auto',           True),
         debug                = debug,
     )
 
