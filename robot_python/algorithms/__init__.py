@@ -70,6 +70,7 @@ def create_follower(lc: dict, debug: bool = False):
         lost_search_arm_s    = lc.get('lost_search_arm_s',      0.8),
         lost_search_fwd_s    = lc.get('lost_search_fwd_s',      0.4),
         white_v_auto         = lc.get('white_v_auto',           True),
+        image_gamma          = lc.get('image_gamma',            1.0),
         debug                = debug,
     )
 

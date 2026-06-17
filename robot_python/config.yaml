@@ -193,6 +193,14 @@ lane_follower:
   # │    yellow_s_low  : 40 – 120   (balance: sensitivity vs. noise)          │
   # └─────────────────────────────────────────────────────────────────────────┘
 
+  # Gamma correction applied to every frame before colour detection.
+  # output = (input/255)^gamma * 255
+  #   1.0  = no change (default)
+  #   1.5  = darken mid-tones (gray surface V=140→104, white V=210→191) — more contrast
+  #   2.0  = strong darkening — use if surface still bleeds into white mask
+  #   0.7  = brighten — use only in very dark rooms where tape is dim
+  image_gamma: 1.5
+
   # Automatic white brightness — adapts V threshold to current lighting every frame.
   # Uses the 30th/90th percentile of the frame's V channel so uneven arena lighting
   # is handled automatically. Set false to use white_v_low directly instead.

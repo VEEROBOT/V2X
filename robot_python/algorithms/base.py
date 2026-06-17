@@ -55,6 +55,7 @@ class BaseFollower(ABC):
                  lost_search_arm_s:   float = 0.8,
                  lost_search_fwd_s:   float = 0.4,
                  white_v_auto:        bool  = True,
+                 image_gamma:         float = 1.0,
                  debug:               bool  = False):
 
         self._linear_speed    = linear_speed
@@ -76,6 +77,14 @@ class BaseFollower(ABC):
         self._blue_lo         = np.array(blue_hsv_low,    dtype=np.uint8)
         self._blue_hi         = np.array(blue_hsv_high,   dtype=np.uint8)
         self._white_v_auto    = bool(white_v_auto)
+        # Gamma LUT: output = (input/255)^gamma * 255
+        # gamma > 1.0 darkens mid-tones (gray surface) more than highlights (white tape)
+        g = float(image_gamma)
+        if abs(g - 1.0) > 0.01:
+            self._gamma_lut = np.array([(i / 255.0) ** g * 255 for i in range(256)],
+                                       dtype=np.uint8)
+        else:
+            self._gamma_lut = None
         self._repel_frac      = float(yellow_repel_frac)
         self._green_repel     = float(green_repel_frac)
         self._blue_repel      = float(blue_repel_frac)
@@ -240,6 +249,8 @@ class BaseFollower(ABC):
         their centroids in _last_gcx/_last_gcy and _last_bcx.
         Stores all results for get_roi_panels().
         """
+        if self._gamma_lut is not None:
+            roi = cv2.LUT(roi, self._gamma_lut)
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         if self._white_v_auto:
             v   = hsv[:, :, 2]
