@@ -129,14 +129,6 @@ lane_follower:
 
   debug_image: false             # show OpenCV debug window (only when running with a display)
 
-  # ── Lighting compensation ─────────────────────────────────────────────────
-  # brightness_offset: subtracted from every V_low threshold at startup.
-  # One knob for the whole room — no need to edit individual colour blocks.
-  #   0        = well-lit room (default)
-  #   20 – 30  = dim indoor / overcast
-  #   40 – 50  = dark room / low-power LEDs
-  brightness_offset: 0           # set 20-40 for dim rooms; 0 = off (default)
-
   # ┌─────────────────────────────────────────────────────────────────────────┐
   # │  HSV COLOUR THRESHOLDS  —  tune here when changing location/lighting    │
   # │                                                                         │
@@ -202,21 +194,19 @@ lane_follower:
   # └─────────────────────────────────────────────────────────────────────────┘
 
   # White centre-line (40 mm tape)
-  # NOTE: white tape (H=49) and gray floor (H=64) have nearly identical S and V.
-  # The only reliable separator is H: tape reads warm (H≈49), floor reads greener (H≈64).
-  # white_h_high=58 sits midway — excludes floor (H=64), keeps tape (H=49).
-  white_h_low:   0     # keep 0
-  white_h_high:  58    # was 180 — narrowed to exclude gray floor (H=64) which V/S cannot separate
+  white_h_low:   0     # keep 0 — white has no hue, accept all colours
+  white_h_high: 180    # keep 180 — white has no hue, accept all colours
   white_s_low:   0     # keep 0 — white is fully desaturated (S near zero)
-  white_s_high:  55    # max saturation — measured green shoulder S=64, white tape S=24; 55 separates them
-  white_v_low:  100    # H-range (h_high=58) now handles gray floor — V_low can stay low for sensitivity
+  white_s_high:  70    # max saturation to count as white — lower if coloured floor leaks in (try 50)
+  white_v_low:  100    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
+                       # Lowered 150→100: sampled white tape reads V≈109 under indoor LED — 150 was missing most of it
   white_v_high: 255    # keep 255 — always accept the brightest whites
 
   # Yellow boundary tape (inner island + outer boundary)
   # NOTE: under warm indoor LED the yellow vinyl reads H≈73 (lime/chartreuse), NOT H=20–35.
   # Shifted to cover the actual measured range. Green shoulder reads H≈56 so boundary at H=62
   # keeps them cleanly separated. Cyan fallback (below) covers any further AWB shift to teal.
-  yellow_h_low:   65   # raised from 60: green shoulder H=56–64 was leaking into yellow at H=60–64
+  yellow_h_low:   60   # was 20 — measured yellow tape: H≈73; start below measured value for margin
   yellow_h_high:  90   # was 35 — upper bound above measured H=73
   yellow_s_low:   70   # was 80 — slightly relaxed to catch dimmer/edge pixels of narrow tape
   yellow_s_high: 255   # keep 255 — accept any saturation above s_low
@@ -239,9 +229,9 @@ lane_follower:
   # with the new yellow range (H:60–90). Yellow outer boundary (H≈73) now correctly falls
   # outside green range and triggers the yellow DANGER path, not the green target path.
   green_h_low:   40    # measured green shoulder: H≈56; start below for margin
-  green_h_high:  62    # upper bound — dead band H:62–65 separates from yellow_h_low=65
-  green_s_low:   50    # measured green shoulder S≈59; lowered from 80 which was rejecting ~60% of pixels
-  green_s_high:  68    # NEW: caps green below yellow's S (yellow_s_low=70); stops saturated yellow at H=60–62 from triggering green
+  green_h_high:  62    # was 80 — narrowed to stay below new yellow range (H:60+)
+  green_s_low:   80    # must be saturated — floor reflections are low-S
+  green_s_high: 255
   green_v_low:   80
   green_v_high: 255
   green_repel_frac: 0.80   # strong enough to overcome motor stiction (was 0.40, too weak)
