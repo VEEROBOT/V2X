@@ -198,8 +198,8 @@ lane_follower:
   white_h_high: 180    # keep 180 — white has no hue, accept all colours
   white_s_low:   0     # keep 0 — white is fully desaturated (S near zero)
   white_s_high:  70    # max saturation to count as white — lower if coloured floor leaks in (try 50)
-  white_v_low:  100    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
-                       # Lowered 150→100: sampled white tape reads V≈109 under indoor LED — 150 was missing most of it
+  white_v_low:  160    # at ground level white tape is very bright (V≈200+); track surface is V≈80-130
+                       # 160 separates them cleanly. Lower to 120 only if tape genuinely not detected.
   white_v_high: 255    # keep 255 — always accept the brightest whites
 
   # Yellow boundary tape (inner island + outer boundary)
@@ -234,7 +234,7 @@ lane_follower:
   green_s_high: 255
   green_v_low:   80
   green_v_high: 255
-  green_repel_frac: 0.80   # strong enough to overcome motor stiction (was 0.40, too weak)
+  green_repel_frac: 0.50   # reduced from 0.80: yellow detection now works so combined repels were causing oscillation
 
   # Blue shoulder line (inner warning — halfway between white and inner yellow)
   # NOTE: printed blue (#0050FF) on vinyl under warm indoor LED lighting shifts
