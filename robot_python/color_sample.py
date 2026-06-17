@@ -5,70 +5,59 @@ color_sample.py — Point the robot camera at a color sample and read its values
 Usage:
     python3 color_sample.py
 
-Place your printed vinyl under the camera, press ENTER to sample the center
-region, and the script reports the Hex code, RGB, and HSV values — plus whether
-it falls inside the existing detection thresholds (white, yellow, green, blue).
+Place your printed vinyl under the camera, press ENTER to sample the centre
+region. Reports Hex, RGB, HSV and whether the color falls inside the robot's
+detection thresholds (white, yellow, green, blue).
+
+No cv2 required — uses picamera2 + numpy only.
 
 Press Ctrl+C to quit.
 """
 
-import sys
 import time
 import numpy as np
 
 SAMPLE_SIZE = 40   # px — square region sampled at frame centre
+WIDTH, HEIGHT = 320, 240
 
 
-def open_camera(width=320, height=240):
-    try:
-        from picamera2 import Picamera2
-        cam = Picamera2()
-        cfg = cam.create_preview_configuration(
-            main={"format": "RGB888", "size": (width, height)})
-        cam.configure(cfg)
-        cam.start()
-        time.sleep(1.0)   # let AGC settle
-        print("  Camera: picamera2")
-        return ('pi', cam)
-    except Exception:
-        pass
-    import cv2
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    time.sleep(0.5)
-    print("  Camera: OpenCV")
-    return ('cv', cap)
+def rgb_to_hsv_opencv(r, g, b):
+    """
+    Convert RGB (0-255) to OpenCV-style HSV: H=0-180, S=0-255, V=0-255.
+    Pure Python — no cv2 needed.
+    """
+    r_, g_, b_ = r / 255.0, g / 255.0, b / 255.0
+    cmax = max(r_, g_, b_)
+    cmin = min(r_, g_, b_)
+    diff = cmax - cmin
 
+    # Value
+    v = cmax
 
-def grab_frame(cam_tuple):
-    import cv2
-    kind, cam = cam_tuple
-    if kind == 'pi':
-        rgb = cam.capture_array()
-        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    # Saturation
+    s = 0.0 if cmax == 0 else diff / cmax
+
+    # Hue (degrees 0-360, then halved for OpenCV 0-180)
+    if diff == 0:
+        h_deg = 0.0
+    elif cmax == r_:
+        h_deg = 60.0 * (((g_ - b_) / diff) % 6)
+    elif cmax == g_:
+        h_deg = 60.0 * ((b_ - r_) / diff + 2)
     else:
-        ret, frame = cam.read()
-        return frame if ret else None
+        h_deg = 60.0 * ((r_ - g_) / diff + 4)
 
-
-def close_camera(cam_tuple):
-    kind, cam = cam_tuple
-    if kind == 'pi':
-        cam.stop()
-        cam.close()
-    else:
-        cam.release()
+    return int(h_deg / 2), int(s * 255), int(v * 255)
 
 
 def classify(h, s, v):
-    """Map HSV to a human-readable label using the robot's detection ranges."""
+    """Map OpenCV HSV to a label using the robot's detection thresholds."""
     if v < 50:
         return "BLACK / too dark to detect"
     if s < 50 and v > 150:
-        return "WHITE  (matches white threshold)"
+        return "WHITE  — matches white threshold"
     if 20 <= h <= 35 and s > 80 and v > 80:
-        return "YELLOW (matches yellow threshold)"
+        return "YELLOW — matches yellow threshold"
     if 40 <= h <= 80 and s > 80 and v > 80:
         return "GREEN  ✓  will be detected as green"
     if 100 <= h <= 130 and s > 80 and v > 80:
@@ -78,59 +67,77 @@ def classify(h, s, v):
     return f"OTHER — not in any threshold  (H={h} S={s} V={v})"
 
 
-def sample(frame):
-    import cv2
-    h, w = frame.shape[:2]
-    cx, cy = w // 2, h // 2
-    half = SAMPLE_SIZE // 2
-    roi = frame[cy - half:cy + half, cx - half:cx + half]
-    mean_bgr = roi.mean(axis=(0, 1))
-    b, g, r = mean_bgr
-    pixel = np.uint8([[[b, g, r]]])
-    hsv = cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)[0][0]
-    hue, sat, val = int(hsv[0]), int(hsv[1]), int(hsv[2])
-    hex_code = f"#{int(r):02X}{int(g):02X}{int(b):02X}"
-
-    # Save annotated frame for visual check
-    out = frame.copy()
-    cv2.rectangle(out, (cx - half, cy - half), (cx + half, cy + half), (0, 255, 0), 2)
-    cv2.putText(out, hex_code, (8, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    cv2.imwrite("/tmp/color_sample.jpg", out)
-
-    return hex_code, int(r), int(g), int(b), hue, sat, val
+def save_annotated(frame_rgb, cx, cy, half, hex_code):
+    """Try to save an annotated JPEG using Pillow. Silent if unavailable."""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.fromarray(frame_rgb)
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([cx - half, cy - half, cx + half, cy + half],
+                       outline=(0, 255, 0), width=2)
+        draw.text((6, 4), hex_code, fill=(255, 255, 255))
+        img.save("/tmp/color_sample.jpg")
+        return True
+    except Exception:
+        return False
 
 
 def main():
     print("\nColor Sampler — hold printed vinyl under the camera centre")
     print("=" * 55)
-    cam = open_camera()
-    print(f"  Sampling a {SAMPLE_SIZE}×{SAMPLE_SIZE}px region at frame centre")
-    print("  Annotated frame saved to /tmp/color_sample.jpg after each sample")
+
+    try:
+        from picamera2 import Picamera2
+    except ImportError:
+        print("ERROR: picamera2 not found.")
+        print("Run:  pip3 install picamera2")
+        return
+
+    cam = Picamera2()
+    cfg = cam.create_preview_configuration(
+        main={"format": "RGB888", "size": (WIDTH, HEIGHT)})
+    cam.configure(cfg)
+    cam.start()
+    time.sleep(1.5)   # let AGC/AWB settle
+    print("  Camera ready (picamera2)")
+    print(f"  Sampling a {SAMPLE_SIZE}×{SAMPLE_SIZE}px region at frame centre ({WIDTH//2},{HEIGHT//2})")
     print("  Press ENTER to sample  |  Ctrl+C to quit\n")
+
+    cx, cy   = WIDTH  // 2, HEIGHT // 2
+    half     = SAMPLE_SIZE // 2
 
     try:
         while True:
             input("  [ Press ENTER to sample ] ")
-            frame = grab_frame(cam)
-            if frame is None:
-                print("  ERROR: could not read frame — check camera connection\n")
-                continue
 
-            hex_code, r, g, b, hue, sat, val = sample(frame)
+            frame_rgb = cam.capture_array()   # shape (H, W, 3) RGB uint8
+            roi = frame_rgb[cy - half:cy + half, cx - half:cx + half]
+            mean = roi.mean(axis=(0, 1))
+            r, g, b = int(mean[0]), int(mean[1]), int(mean[2])
 
-            print(f"\n  ┌─────────────────────────────────────┐")
-            print(f"  │  Hex  : {hex_code:<28}│")
-            print(f"  │  RGB  : R={r:<3} G={g:<3} B={b:<3}           │")
-            print(f"  │  HSV  : H={hue:<3} S={sat:<3} V={val:<3}           │")
-            print(f"  │         (OpenCV H=0–180, S/V=0–255) │")
-            print(f"  │  ID   : {classify(hue, sat, val):<28}│")
-            print(f"  └─────────────────────────────────────┘")
-            print(f"  Frame saved → /tmp/color_sample.jpg\n")
+            hue, sat, val = rgb_to_hsv_opencv(r, g, b)
+            hex_code = f"#{r:02X}{g:02X}{b:02X}"
+            label    = classify(hue, sat, val)
+
+            saved = save_annotated(frame_rgb, cx, cy, half, hex_code)
+            saved_msg = "  Frame saved → /tmp/color_sample.jpg" if saved else ""
+
+            print(f"\n  ┌─────────────────────────────────────────┐")
+            print(f"  │  Hex  : {hex_code:<32}│")
+            print(f"  │  RGB  : R={r:<3} G={g:<3} B={b:<3}              │")
+            print(f"  │  HSV  : H={hue:<3} S={sat:<3} V={val:<3}              │")
+            print(f"  │         (OpenCV H=0–180, S/V=0–255)     │")
+            print(f"  │  ID   : {label:<32}│")
+            print(f"  └─────────────────────────────────────────┘")
+            if saved_msg:
+                print(saved_msg)
+            print()
 
     except KeyboardInterrupt:
         print("\n  Quitting.")
     finally:
-        close_camera(cam)
+        cam.stop()
+        cam.close()
 
 
 if __name__ == '__main__':
