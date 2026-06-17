@@ -254,11 +254,18 @@ class BaseFollower(ABC):
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         if self._white_v_auto:
             v   = hsv[:, :, 2]
-            # 30th-percentile ≈ track-surface brightness; 90th ≈ white-tape brightness.
-            # Threshold halfway between them adapts to any lighting level automatically.
             v_floor = float(np.percentile(v, 30))
             v_peak  = float(np.percentile(v, 90))
-            v_low   = int(max(60, min(230, 0.5 * v_floor + 0.5 * v_peak)))
+            if (v_peak - v_floor) >= 60:
+                # Meaningful contrast: bright object exists → threshold 40% floor + 60% peak.
+                # Weighted toward peak so threshold sits closer to white-tape brightness,
+                # reducing grey surface leaking through.
+                v_low = int(0.4 * v_floor + 0.6 * v_peak)
+            else:
+                # Flat grey frame — no white tape visible → set threshold high so nothing
+                # is detected as white and the robot correctly enters LOST.
+                v_low = 220
+            v_low    = max(60, min(230, v_low))
             white_lo = np.array([self._white_lo[0], self._white_lo[1], v_low], dtype=np.uint8)
         else:
             white_lo = self._white_lo
