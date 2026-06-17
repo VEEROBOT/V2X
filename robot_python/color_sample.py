@@ -1,143 +1,233 @@
 #!/usr/bin/env python3
 """
-color_sample.py — Point the robot camera at a color sample and read its values.
+color_sample.py — Sample the robot camera and check against detection thresholds.
+
+Hold a coloured line under the camera centre. Readings update every 0.5 s.
+Reads thresholds live from config.yaml so results match exactly what the robot detects.
 
 Usage:
-    python3 color_sample.py
+    python3 color_sample.py          # continuous (Ctrl-C to quit)
+    python3 color_sample.py --once   # single sample then exit
 
-Place your printed vinyl under the camera, press ENTER to sample the centre
-region. Reports Hex, RGB, HSV and whether the color falls inside the robot's
-detection thresholds (white, yellow, green, blue).
-
-No cv2 required — uses picamera2 + numpy only.
-
-Press Ctrl+C to quit.
+On the OBU: stop the robot service first so the camera is free:
+    sudo systemctl stop v2x_car      # or v2x_emgy on the ambulance OBU
 """
 
+import os
+import sys
 import time
 import numpy as np
 
-SAMPLE_SIZE = 40   # px — square region sampled at frame centre
-WIDTH, HEIGHT = 320, 240
+SAMPLE_W  = 80     # sample region width  (px) — wide enough to catch the line
+SAMPLE_H  = 60     # sample region height (px) — taller than 25mm lines
+WIDTH     = 320
+HEIGHT    = 240
+INTERVAL  = 0.5    # seconds between auto-samples
+DETECT_PCT = 5.0   # % of sample pixels that must match to call it "detected"
 
 
-def rgb_to_hsv_opencv(r, g, b):
-    """
-    Convert RGB (0-255) to OpenCV-style HSV: H=0-180, S=0-255, V=0-255.
-    Pure Python — no cv2 needed.
-    """
+# ── Load thresholds ──────────────────────────────────────────────────────────
+
+def load_thresholds():
+    """Load HSV thresholds from config.yaml next to this script. Falls back to defaults."""
+    defaults = {
+        'white':  ((  0,   0, 150), (180,  70, 255)),
+        'yellow': (( 20,  80,  80), ( 35, 255, 255)),
+        'green':  (( 40,  80,  80), ( 80, 255, 255)),
+        'blue':   ((  0, 100, 100), ( 20, 255, 255)),
+    }
+    try:
+        import yaml
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
+        with open(path) as f:
+            cfg = yaml.safe_load(f)
+        lf = cfg.get('lane_follower', {})
+        loaded = {
+            'white':  ((lf.get('white_h_low',    0), lf.get('white_s_low',   0), lf.get('white_v_low',  150)),
+                       (lf.get('white_h_high', 180), lf.get('white_s_high',  70), lf.get('white_v_high', 255))),
+            'yellow': ((lf.get('yellow_h_low',  20), lf.get('yellow_s_low',  80), lf.get('yellow_v_low',  80)),
+                       (lf.get('yellow_h_high', 35), lf.get('yellow_s_high',255), lf.get('yellow_v_high',255))),
+            'green':  ((lf.get('green_h_low',   40), lf.get('green_s_low',   80), lf.get('green_v_low',   80)),
+                       (lf.get('green_h_high',  80), lf.get('green_s_high', 255), lf.get('green_v_high', 255))),
+            'blue':   ((lf.get('blue_h_low',     0), lf.get('blue_s_low',  100), lf.get('blue_v_low',   100)),
+                       (lf.get('blue_h_high',   20), lf.get('blue_s_high', 255), lf.get('blue_v_high',  255))),
+        }
+        print("  Thresholds: config.yaml")
+        return loaded
+    except Exception as e:
+        print(f"  Thresholds: defaults (config.yaml not loaded: {e})")
+        return defaults
+
+
+# ── Camera ───────────────────────────────────────────────────────────────────
+
+def start_camera():
+    """Try picamera2, then fall back to OpenCV USB webcam."""
+    try:
+        from picamera2 import Picamera2
+        cam = Picamera2()
+        config = cam.create_preview_configuration(
+            main={"format": "RGB888", "size": (WIDTH, HEIGHT)})
+        cam.configure(config)
+        cam.start()
+        time.sleep(2.0)   # let AGC / AWB settle
+        print("  Camera: picamera2")
+        return cam, 'pi'
+    except Exception as e:
+        print(f"  picamera2 failed ({e}), trying OpenCV...")
+    try:
+        import cv2
+        cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
+        if not cap.isOpened():
+            raise RuntimeError("VideoCapture(0) could not open")
+        time.sleep(0.5)
+        print("  Camera: OpenCV/USB")
+        return cap, 'cv'
+    except Exception as e:
+        raise RuntimeError(f"No camera available: {e}")
+
+
+def grab_rgb(cam, mode):
+    if mode == 'pi':
+        arr = cam.capture_array()
+        return arr[:, :, :3]   # drop alpha if present (RGBA→RGB)
+    else:
+        import cv2
+        ok, frame = cam.read()
+        if not ok:
+            raise RuntimeError("Camera read failed")
+        return frame[:, :, ::-1]   # BGR→RGB
+
+
+def stop_camera(cam, mode):
+    try:
+        if mode == 'pi':
+            cam.stop()
+        else:
+            cam.release()
+    except Exception:
+        pass
+
+
+# ── Colour analysis ──────────────────────────────────────────────────────────
+
+def rgb_to_hsv_cv(r, g, b):
+    """RGB (0–255) → OpenCV HSV (H 0–180, S/V 0–255). Pure Python, no cv2."""
     r_, g_, b_ = r / 255.0, g / 255.0, b / 255.0
     cmax = max(r_, g_, b_)
     cmin = min(r_, g_, b_)
     diff = cmax - cmin
-
-    # Value
     v = cmax
-
-    # Saturation
     s = 0.0 if cmax == 0 else diff / cmax
-
-    # Hue (degrees 0-360, then halved for OpenCV 0-180)
     if diff == 0:
-        h_deg = 0.0
+        h = 0.0
     elif cmax == r_:
-        h_deg = 60.0 * (((g_ - b_) / diff) % 6)
+        h = 60.0 * (((g_ - b_) / diff) % 6)
     elif cmax == g_:
-        h_deg = 60.0 * ((b_ - r_) / diff + 2)
+        h = 60.0 * ((b_ - r_) / diff + 2)
     else:
-        h_deg = 60.0 * ((r_ - g_) / diff + 4)
-
-    return int(h_deg / 2), int(s * 255), int(v * 255)
-
-
-def classify(h, s, v):
-    """Map OpenCV HSV to a label using the robot's detection thresholds."""
-    if v < 50:
-        return "BLACK / too dark to detect"
-    if s < 50 and v > 150:
-        return "WHITE  — matches white threshold"
-    if 20 <= h <= 35 and s > 80 and v > 80:
-        return "YELLOW — matches yellow threshold"
-    if 40 <= h <= 80 and s > 80 and v > 80:
-        return "GREEN  ✓  will be detected as green"
-    if 100 <= h <= 130 and s > 80 and v > 80:
-        return "BLUE   ✓  will be detected as blue"
-    if s < 80:
-        return f"GRAY / low saturation  (H={h} S={s} V={v})"
-    return f"OTHER — not in any threshold  (H={h} S={s} V={v})"
+        h = 60.0 * ((r_ - g_) / diff + 4)
+    return int(h / 2), int(s * 255), int(v * 255)
 
 
-def save_annotated(frame_rgb, cx, cy, half, hex_code):
-    """Try to save an annotated JPEG using Pillow. Silent if unavailable."""
+def analyse_region(frame_rgb, cx, cy, sw, sh, thresholds):
+    """
+    Sample a region and return:
+      mean_hsv  — (H, S, V) of the mean RGB
+      mean_rgb  — (R, G, B) mean
+      pcts      — {name: float} percentage of pixels matching each threshold
+    """
+    y0 = max(0, cy - sh // 2);  y1 = min(frame_rgb.shape[0], cy + sh // 2)
+    x0 = max(0, cx - sw // 2);  x1 = min(frame_rgb.shape[1], cx + sw // 2)
+    roi = frame_rgb[y0:y1, x0:x1]
+
+    mean_rgb = tuple(int(x) for x in roi.mean(axis=(0, 1)))
+    mean_hsv = rgb_to_hsv_cv(*mean_rgb)
+
     try:
-        from PIL import Image, ImageDraw, ImageFont
-        img = Image.fromarray(frame_rgb)
-        draw = ImageDraw.Draw(img)
-        draw.rectangle([cx - half, cy - half, cx + half, cy + half],
-                       outline=(0, 255, 0), width=2)
-        draw.text((6, 4), hex_code, fill=(255, 255, 255))
-        img.save("/tmp/color_sample.jpg")
-        return True
-    except Exception:
-        return False
+        import cv2
+        hsv_roi = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)
+        total   = hsv_roi.shape[0] * hsv_roi.shape[1]
+        pcts = {}
+        for name, (lo, hi) in thresholds.items():
+            mask = cv2.inRange(hsv_roi,
+                               np.array(lo, dtype=np.uint8),
+                               np.array(hi, dtype=np.uint8))
+            pcts[name] = 100.0 * int(mask.sum()) / 255 / max(total, 1)
+    except ImportError:
+        pcts = {name: 0.0 for name in thresholds}
 
+    return mean_hsv, mean_rgb, pcts
+
+
+# ── Display ──────────────────────────────────────────────────────────────────
+
+BAR_W = 24
+
+def bar(pct):
+    filled = int(round(pct / 100.0 * BAR_W))
+    filled = max(0, min(BAR_W, filled))
+    return '█' * filled + '░' * (BAR_W - filled)
+
+
+def print_sample(n, mean_hsv, mean_rgb, pcts):
+    h, s, v   = mean_hsv
+    r, g, b   = mean_rgb
+    hex_code  = f"#{r:02X}{g:02X}{b:02X}"
+    detections = [name.upper() for name, pct in pcts.items() if pct >= DETECT_PCT]
+    det_str    = '  ◀  ' + ' + '.join(detections) if detections else '  (no match)'
+
+    print(f"\n  [{n:4d}]  {hex_code}   H={h:3d}  S={s:3d}  V={v:3d}{det_str}")
+    for name, pct in pcts.items():
+        flag = ' ◀' if pct >= DETECT_PCT else ''
+        print(f"         {name:<8s}  {bar(pct)}  {pct:5.1f}%{flag}")
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print("\nColor Sampler — hold printed vinyl under the camera centre")
-    print("=" * 55)
+    once = '--once' in sys.argv
+
+    print()
+    print("V2X Color Sampler")
+    print("=" * 52)
+
+    thresholds = load_thresholds()
+    print()
+    for name, (lo, hi) in thresholds.items():
+        print(f"    {name:<8s}  H {lo[0]:3d}–{hi[0]:3d}  S {lo[1]:3d}–{hi[1]:3d}  V {lo[2]:3d}–{hi[2]:3d}")
+    print()
 
     try:
-        from picamera2 import Picamera2
-    except ImportError:
-        print("ERROR: picamera2 not found.")
-        print("Run:  pip3 install picamera2")
-        return
+        cam, mode = start_camera()
+    except RuntimeError as e:
+        print(f"\n  ERROR: {e}")
+        sys.exit(1)
 
-    cam = Picamera2()
-    cfg = cam.create_preview_configuration(
-        main={"format": "RGB888", "size": (WIDTH, HEIGHT)})
-    cam.configure(cfg)
-    cam.start()
-    time.sleep(1.5)   # let AGC/AWB settle
-    print("  Camera ready (picamera2)")
-    print(f"  Sampling a {SAMPLE_SIZE}×{SAMPLE_SIZE}px region at frame centre ({WIDTH//2},{HEIGHT//2})")
-    print("  Press ENTER to sample  |  Ctrl+C to quit\n")
-
-    cx, cy   = WIDTH  // 2, HEIGHT // 2
-    half     = SAMPLE_SIZE // 2
+    cx, cy = WIDTH // 2, HEIGHT // 2
+    print(f"\n  Sampling {SAMPLE_W}×{SAMPLE_H}px at centre ({cx},{cy})")
+    if once:
+        print("  --once mode\n")
+    else:
+        print(f"  Auto-sampling every {INTERVAL}s  |  Ctrl-C to quit\n")
 
     try:
+        n = 0
         while True:
-            input("  [ Press ENTER to sample ] ")
-
-            frame_rgb = cam.capture_array()   # shape (H, W, 3) RGB uint8
-            roi = frame_rgb[cy - half:cy + half, cx - half:cx + half]
-            mean = roi.mean(axis=(0, 1))
-            r, g, b = int(mean[0]), int(mean[1]), int(mean[2])
-
-            hue, sat, val = rgb_to_hsv_opencv(r, g, b)
-            hex_code = f"#{r:02X}{g:02X}{b:02X}"
-            label    = classify(hue, sat, val)
-
-            saved = save_annotated(frame_rgb, cx, cy, half, hex_code)
-            saved_msg = "  Frame saved → /tmp/color_sample.jpg" if saved else ""
-
-            print(f"\n  ┌─────────────────────────────────────────┐")
-            print(f"  │  Hex  : {hex_code:<32}│")
-            print(f"  │  RGB  : R={r:<3} G={g:<3} B={b:<3}              │")
-            print(f"  │  HSV  : H={hue:<3} S={sat:<3} V={val:<3}              │")
-            print(f"  │         (OpenCV H=0–180, S/V=0–255)     │")
-            print(f"  │  ID   : {label:<32}│")
-            print(f"  └─────────────────────────────────────────┘")
-            if saved_msg:
-                print(saved_msg)
-            print()
-
+            frame             = grab_rgb(cam, mode)
+            mean_hsv, rgb, pcts = analyse_region(
+                frame, cx, cy, SAMPLE_W, SAMPLE_H, thresholds)
+            n += 1
+            print_sample(n, mean_hsv, rgb, pcts)
+            if once:
+                break
+            time.sleep(INTERVAL)
     except KeyboardInterrupt:
-        print("\n  Quitting.")
+        print("\n  Done.")
     finally:
-        cam.stop()
-        cam.close()
+        stop_camera(cam, mode)
 
 
 if __name__ == '__main__':

@@ -82,7 +82,8 @@ class EmergencyHandler:
                  rec_white_kp:            float = 0.006,
                  rec_white_max:           float = 0.60,
                  rec_white_tol:           float = 40.0,
-                 resume_vx_floor:         float = 0.50):
+                 resume_vx_floor:         float = 0.50,
+                 recovery_min_s:          float = 0.8):
 
         # Direction sign: +1 = clockwise (inner island to RIGHT of robot)
         #                 -1 = counterclockwise (inner island to LEFT of robot)
@@ -175,6 +176,7 @@ class EmergencyHandler:
         self._rec_white_max        = abs(float(rec_white_max))
         self._rec_white_tol        = abs(float(rec_white_tol))
         self._resume_vx_floor      = float(max(0.0, min(1.0, resume_vx_floor)))
+        self._rec_min_s            = float(max(0.0, recovery_min_s))
 
     # ── Input setters ────────────────────────────────────────────────────────
     def update_own_position(self, pos: Optional[Dict]):
@@ -399,7 +401,8 @@ class EmergencyHandler:
             # centred — not on the first edge-of-frame glimpse.  This keeps the
             # robot driving toward the line in one motion instead of stalling and
             # nudging little by little (and sometimes losing it).
-            white_centered = (white_found and white_err is not None
+            white_centered = (elapsed >= self._rec_min_s
+                              and white_found and white_err is not None
                               and abs(white_err) <= self._rec_white_tol)
 
             if outer_tag and self._ev_side > 0:
@@ -518,6 +521,7 @@ class EmergencyHandler:
         # Yellow during evasion means we are approaching the outer boundary itself.
         # Drop forward speed to near zero and rotate hard back into the arena.
         if yellow_cx is not None:
+            self._outer_yellow_seen = True   # at/past boundary — stop arcing outward after retreat
             logger.warning("Outer evasion: YELLOW detected during evasion — overshot green line, retreating")
             return self._cross_guard_vx, -toward_outer * self._outer_centre_turn, False
 
@@ -534,8 +538,10 @@ class EmergencyHandler:
                 # Ease AWAY from the boundary (into the arena) slowly until it
                 # reappears.  Never arc further outward while blind.
                 return base_vx * 0.5, -toward_outer * self._outer_perp_turn, False
-            # Haven't found green yet — arc toward the outer shoulder to find it.
-            return base_vx, toward_outer * abs(self._ev_angular), False
+            # Haven't found green yet — arc toward outer shoulder at half speed.
+            # 25mm shoulder line at full vx=0.10 gives only 5 frames to detect
+            # and react; half speed doubles the detection window to ~10 frames.
+            return base_vx * 0.5, toward_outer * abs(self._ev_angular), False
 
         rel      = green_cx / float(frame_w)
         e_away   = (rel - target) * toward_outer   # >0 = green drifting toward centre (too far in)

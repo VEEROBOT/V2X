@@ -441,6 +441,7 @@ def main():
         rec_white_max          = ec.get('rec_white_max',          0.60),
         rec_white_tol          = ec.get('rec_white_tol',          40.0),
         resume_vx_floor        = ec.get('resume_vx_floor',        0.50),
+        recovery_min_s         = ec.get('recovery_min_s',         0.8),
     )
 
     # Sync yellow target between handler and follower so both controllers

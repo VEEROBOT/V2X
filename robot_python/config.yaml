@@ -396,6 +396,9 @@ emergency_handler:
                                  # so it converges in one motion instead of stalling in the gray.
   recovery_angular_speed: 0.45  # magnitude — toward outer lane (away from inner island)
   recovery_duration_s: 3.5      # fallback timeout if white not found (2.5 was too short)
+  recovery_min_s: 0.8           # minimum time in RECOVERING before white-centred exit is accepted;
+                                 # prevents jumping to RESUMING in the first frame if white happens
+                                 # to be centred at the start (green shoulder is close to white line)
   resume_ramp_duration_s: 2.0   # ramp speed up over this many seconds after RECOVERING (prevents jerk)
 
   n_tags: 10              # must match position.n_inner_tags — total inner oval tags
