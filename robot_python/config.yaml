@@ -216,7 +216,7 @@ lane_follower:
   # NOTE: under warm indoor LED the yellow vinyl reads H≈73 (lime/chartreuse), NOT H=20–35.
   # Shifted to cover the actual measured range. Green shoulder reads H≈56 so boundary at H=62
   # keeps them cleanly separated. Cyan fallback (below) covers any further AWB shift to teal.
-  yellow_h_low:   60   # was 20 — measured yellow tape: H≈73; start below measured value for margin
+  yellow_h_low:   65   # raised from 60: green shoulder H=56–64 was leaking into yellow at H=60–64
   yellow_h_high:  90   # was 35 — upper bound above measured H=73
   yellow_s_low:   70   # was 80 — slightly relaxed to catch dimmer/edge pixels of narrow tape
   yellow_s_high: 255   # keep 255 — accept any saturation above s_low
@@ -239,9 +239,9 @@ lane_follower:
   # with the new yellow range (H:60–90). Yellow outer boundary (H≈73) now correctly falls
   # outside green range and triggers the yellow DANGER path, not the green target path.
   green_h_low:   40    # measured green shoulder: H≈56; start below for margin
-  green_h_high:  62    # was 80 — narrowed to stay below new yellow range (H:60+)
-  green_s_low:   50    # measured green shoulder S=64 mean; lowered from 80 which was rejecting ~60% of pixels
-  green_s_high: 255
+  green_h_high:  62    # upper bound — dead band H:62–65 separates from yellow_h_low=65
+  green_s_low:   50    # measured green shoulder S≈59; lowered from 80 which was rejecting ~60% of pixels
+  green_s_high:  68    # NEW: caps green below yellow's S (yellow_s_low=70); stops saturated yellow at H=60–62 from triggering green
   green_v_low:   80
   green_v_high: 255
   green_repel_frac: 0.80   # strong enough to overcome motor stiction (was 0.40, too weak)
