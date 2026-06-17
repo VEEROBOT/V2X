@@ -135,7 +135,7 @@ lane_follower:
   #   0        = well-lit room (default)
   #   20 – 30  = dim indoor / overcast
   #   40 – 50  = dark room / low-power LEDs
-  brightness_offset: 40          # current room is dim — lowers all V_low thresholds by 30
+  brightness_offset: 0           # set 20-40 for dim rooms; 0 = off (default)
 
   # ┌─────────────────────────────────────────────────────────────────────────┐
   # │  HSV COLOUR THRESHOLDS  —  tune here when changing location/lighting    │
