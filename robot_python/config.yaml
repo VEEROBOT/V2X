@@ -228,12 +228,15 @@ lane_follower:
   green_repel_frac: 0.40   # weaker than yellow (0.65) — green is a warning, not a hard wall
 
   # Blue shoulder line (inner warning — halfway between white and inner yellow)
-  # During normal following: blue visible → drifting inward warning (gentle repel).
-  blue_h_low:  100
-  blue_h_high: 130
-  blue_s_low:   80
+  # NOTE: printed blue (#0050FF) on vinyl under warm indoor LED lighting shifts
+  # via camera AWB to orange-red (H≈5-15). Thresholds set to match what the
+  # camera actually sees. Run color_sample.py (after stopping v2x_emgy service)
+  # to verify and fine-tune for your specific lighting.
+  blue_h_low:   0
+  blue_h_high:  20
+  blue_s_low:  100          # keep high-S to avoid warm-toned floor noise
   blue_s_high: 255
-  blue_v_low:   80
+  blue_v_low:  100
   blue_v_high: 255
   blue_repel_frac: 0.40    # same gentle repel as green
 
