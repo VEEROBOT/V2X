@@ -209,7 +209,7 @@ lane_follower:
   white_h_high:  58    # was 180 — narrowed to exclude gray floor (H=64) which V/S cannot separate
   white_s_low:   0     # keep 0 — white is fully desaturated (S near zero)
   white_s_high:  55    # max saturation — measured green shoulder S=64, white tape S=24; 55 separates them
-  white_v_low:  150    # raised back from 100 — current lighting gives white tape V=186; lower to 100 if dim room
+  white_v_low:  100    # H-range (h_high=58) now handles gray floor — V_low can stay low for sensitivity
   white_v_high: 255    # keep 255 — always accept the brightest whites
 
   # Yellow boundary tape (inner island + outer boundary)
