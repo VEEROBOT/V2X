@@ -198,13 +198,17 @@ lane_follower:
   white_h_high: 180    # keep 180 — white has no hue, accept all colours
   white_s_low:   0     # keep 0 — white is fully desaturated (S near zero)
   white_s_high:  70    # max saturation to count as white — lower if coloured floor leaks in (try 50)
-  white_v_low:  150    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
+  white_v_low:  100    # ← MOST COMMON CHANGE: raise (170–200) if floor shows as white; lower (110–130) if tape not detected
+                       # Lowered 150→100: sampled white tape reads V≈109 under indoor LED — 150 was missing most of it
   white_v_high: 255    # keep 255 — always accept the brightest whites
 
-  # Yellow boundary tape (40 mm, inner island + outer boundary)
-  yellow_h_low:   20   # lower hue limit for yellow — do not go below 15 (red starts leaking in)
-  yellow_h_high:  35   # upper hue limit for yellow — do not go above 45 (green starts leaking in)
-  yellow_s_low:   80   # ← raise (100–120) if floor/objects trigger false yellow; lower (40–60) if tape missed
+  # Yellow boundary tape (inner island + outer boundary)
+  # NOTE: under warm indoor LED the yellow vinyl reads H≈73 (lime/chartreuse), NOT H=20–35.
+  # Shifted to cover the actual measured range. Green shoulder reads H≈56 so boundary at H=62
+  # keeps them cleanly separated. Cyan fallback (below) covers any further AWB shift to teal.
+  yellow_h_low:   60   # was 20 — measured yellow tape: H≈73; start below measured value for margin
+  yellow_h_high:  90   # was 35 — upper bound above measured H=73
+  yellow_s_low:   70   # was 80 — slightly relaxed to catch dimmer/edge pixels of narrow tape
   yellow_s_high: 255   # keep 255 — accept any saturation above s_low
   yellow_v_low:   80   # lower if yellow tape is dim / shadowed (try 50); raise if bright non-yellow detected
   yellow_v_high: 255   # keep 255 — always accept bright yellows
@@ -221,8 +225,11 @@ lane_follower:
   # Green shoulder line (outer evasion hold target — halfway between outer yellow and white)
   # Robot TARGETS this during outer evasion; seeing yellow means it overshot.
   # During normal following: green visible → drifting outward warning (gentle repel).
-  green_h_low:   40    # pure green starts well above yellow (35) — no overlap
-  green_h_high:  80    # upper limit before cyan starts
+  # NOTE: green shoulder reads H≈56. Upper limit narrowed to 62 so it does NOT overlap
+  # with the new yellow range (H:60–90). Yellow outer boundary (H≈73) now correctly falls
+  # outside green range and triggers the yellow DANGER path, not the green target path.
+  green_h_low:   40    # measured green shoulder: H≈56; start below for margin
+  green_h_high:  62    # was 80 — narrowed to stay below new yellow range (H:60+)
   green_s_low:   80    # must be saturated — floor reflections are low-S
   green_s_high: 255
   green_v_low:   80
