@@ -36,6 +36,12 @@ def create_follower(lc: dict, debug: bool = False):
     """Build the lane follower selected by lc['algorithm']."""
     algo = lc.get('algorithm', 'pure_pursuit').lower()
 
+    # brightness_offset: subtract this from every V_low threshold.
+    # Increase for dim rooms so dark-looking tape is still detected.
+    # 0 = no adjustment (default).  Try 20–40 for dim indoor lighting.
+    voff = int(lc.get('brightness_offset', 0))
+    def _vlo(v): return max(0, int(v) - voff)
+
     common = dict(
         linear_speed       = lc['linear_speed'],
         max_angular_speed  = lc['max_angular_speed'],
@@ -43,15 +49,15 @@ def create_follower(lc: dict, debug: bool = False):
         min_contour_area   = lc['min_contour_area'],
         lane_offset_px     = lc['lane_offset_px'],
         driving_direction  = lc.get('driving_direction', 'clockwise'),
-        white_hsv_low     = (lc['white_h_low'],  lc['white_s_low'],  lc['white_v_low']),
+        white_hsv_low     = (lc['white_h_low'],  lc['white_s_low'],  _vlo(lc['white_v_low'])),
         white_hsv_high    = (lc['white_h_high'], lc['white_s_high'], lc['white_v_high']),
-        yellow_hsv_low    = (lc['yellow_h_low'],  lc['yellow_s_low'],  lc['yellow_v_low']),
+        yellow_hsv_low    = (lc['yellow_h_low'],  lc['yellow_s_low'],  _vlo(lc['yellow_v_low'])),
         yellow_hsv_high   = (lc['yellow_h_high'], lc['yellow_s_high'], lc['yellow_v_high']),
-        cyan_hsv_low      = (lc['cyan_h_low'],  lc['cyan_s_low'],  lc['cyan_v_low']),
+        cyan_hsv_low      = (lc['cyan_h_low'],  lc['cyan_s_low'],  _vlo(lc['cyan_v_low'])),
         cyan_hsv_high     = (lc['cyan_h_high'], lc['cyan_s_high'], lc['cyan_v_high']),
-        green_hsv_low     = (lc.get('green_h_low', 40),  lc.get('green_s_low', 80),  lc.get('green_v_low', 80)),
+        green_hsv_low     = (lc.get('green_h_low', 40),  lc.get('green_s_low', 80),  _vlo(lc.get('green_v_low', 80))),
         green_hsv_high    = (lc.get('green_h_high', 80), lc.get('green_s_high', 255), lc.get('green_v_high', 255)),
-        blue_hsv_low      = (lc.get('blue_h_low', 100),  lc.get('blue_s_low', 80),  lc.get('blue_v_low', 80)),
+        blue_hsv_low      = (lc.get('blue_h_low', 100),  lc.get('blue_s_low', 80),  _vlo(lc.get('blue_v_low', 80))),
         blue_hsv_high     = (lc.get('blue_h_high', 130), lc.get('blue_s_high', 255), lc.get('blue_v_high', 255)),
         yellow_repel_frac = lc.get('yellow_repel_frac', 0.65),
         green_repel_frac  = lc.get('green_repel_frac', 0.40),

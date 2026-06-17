@@ -129,6 +129,14 @@ lane_follower:
 
   debug_image: false             # show OpenCV debug window (only when running with a display)
 
+  # ── Lighting compensation ─────────────────────────────────────────────────
+  # brightness_offset: subtracted from every V_low threshold at startup.
+  # One knob for the whole room — no need to edit individual colour blocks.
+  #   0        = well-lit room (default)
+  #   20 – 30  = dim indoor / overcast
+  #   40 – 50  = dark room / low-power LEDs
+  brightness_offset: 30          # current room is dim — lowers all V_low thresholds by 30
+
   # ┌─────────────────────────────────────────────────────────────────────────┐
   # │  HSV COLOUR THRESHOLDS  —  tune here when changing location/lighting    │
   # │                                                                         │
