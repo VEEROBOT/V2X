@@ -28,11 +28,12 @@ import numpy as np
 class BaseFollower(ABC):
 
     def __init__(self, *,
-                 linear_speed:      float = 0.10,
-                 max_angular_speed: float = 0.90,
-                 crop_top_ratio:    float = 0.30,
-                 min_contour_area:  int   = 150,
-                 lane_offset_px:    float = 0.0,
+                 linear_speed:       float = 0.10,
+                 max_angular_speed:  float = 0.90,
+                 crop_top_ratio:     float = 0.30,
+                 min_contour_area:   int   = 150,
+                 lane_offset_px:     float = 0.0,
+                 driving_direction:  str   = 'clockwise',
                  white_hsv_low:   Tuple = (0,   0, 150),
                  white_hsv_high:  Tuple = (180, 70, 255),
                  yellow_hsv_low:  Tuple = (20,  80,  80),
@@ -60,6 +61,9 @@ class BaseFollower(ABC):
         self._crop_top        = crop_top_ratio
         self._min_area        = min_contour_area
         self._lane_offset     = float(lane_offset_px)
+        # +1 = clockwise (inner island to RIGHT → inward = right → wz < 0)
+        # -1 = counterclockwise (inner island to LEFT → inward = left → wz > 0)
+        self._dir = +1 if driving_direction.lower().startswith('c') and 'counter' not in driving_direction.lower() else -1
         self._white_lo        = np.array(white_hsv_low,   dtype=np.uint8)
         self._white_hi        = np.array(white_hsv_high,  dtype=np.uint8)
         self._yellow_lo       = np.array(yellow_hsv_low,  dtype=np.uint8)

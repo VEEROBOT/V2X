@@ -246,32 +246,33 @@ class PurePursuitFollower(BaseFollower):
             self._last_wz = wz
             return self._linear_speed * 0.5, wz
 
-        # ── Priority 3: green shoulder — gentle outward repel ────────────────
-        # Green is between the white line and the outer yellow boundary.  Seeing
-        # it during normal follow means the robot is drifting outward — steer back
-        # toward white.  Weaker than yellow: green is a warning, not a hard wall.
+        # ── Priority 3: green shoulder — inward repel (back toward white) ───
+        # Green is the OUTER shoulder marker. Seeing it means the robot has drifted
+        # outward past the white line. Always steer INWARD regardless of which side
+        # of the frame green is on — centroid-sign is unreliable on curves where the
+        # green line can appear right-of-centre even though the boundary is outward.
+        # Use a strong wz and low vx so the inner wheel has enough differential to
+        # actually rotate rather than stalling near stiction.
         if self._last_gcx is not None:
             self._lost_start = None
-            self._mode = 'WHITE'   # still white-ish driving, just correcting
+            self._mode = 'WHITE'
             self._prev_error = 0.0
             self._integral   = 0.0
-            wz = float(np.sign(self._last_gcx - target) * self._max_angular * self._green_repel)
-            wz = float(np.clip(wz, -self._max_angular, self._max_angular))
+            # _dir: +1=CW (inward=right=wz<0), -1=CCW (inward=left=wz>0)
+            wz = float(-self._dir * self._max_angular * self._green_repel)
             self._last_wz = wz
-            return self._linear_speed * 0.7, wz
+            return self._linear_speed * 0.4, wz   # low vx → more turning authority
 
-        # ── Priority 4: blue shoulder — gentle inward repel ──────────────────
-        # Blue is between the white line and the inner yellow boundary.  Seeing
-        # it means the robot is drifting toward the inner island — steer back out.
+        # ── Priority 4: blue shoulder — outward repel (back toward white) ────
+        # Blue is the INNER shoulder marker. Always steer OUTWARD (away from island).
         if self._last_bcx is not None:
             self._lost_start = None
             self._mode = 'WHITE'
             self._prev_error = 0.0
             self._integral   = 0.0
-            wz = float(np.sign(self._last_bcx - target) * self._max_angular * self._blue_repel)
-            wz = float(np.clip(wz, -self._max_angular, self._max_angular))
+            wz = float(+self._dir * self._max_angular * self._blue_repel)
             self._last_wz = wz
-            return self._linear_speed * 0.7, wz
+            return self._linear_speed * 0.4, wz
 
         # ── Priority 5: LOST — carry last steering, then active search sweep ──
         if self._lost_start is None:

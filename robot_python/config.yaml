@@ -49,6 +49,8 @@ lane_follower:
   # recorded_path  : camera + training data — blends learned curvature with live camera
   # centroid       : original — steers toward the averaged centroid of the line
   algorithm: pure_pursuit
+  driving_direction: clockwise   # clockwise or counterclockwise — determines which way
+                                  # green (outer shoulder) and blue (inner shoulder) repel
  
   # --- Speed ---
   linear_speed: 0.10             # m/s — how fast the robot drives on the line
@@ -225,7 +227,7 @@ lane_follower:
   green_s_high: 255
   green_v_low:   80
   green_v_high: 255
-  green_repel_frac: 0.40   # weaker than yellow (0.65) — green is a warning, not a hard wall
+  green_repel_frac: 0.80   # strong enough to overcome motor stiction (was 0.40, too weak)
 
   # Blue shoulder line (inner warning — halfway between white and inner yellow)
   # NOTE: printed blue (#0050FF) on vinyl under warm indoor LED lighting shifts
@@ -409,7 +411,7 @@ emergency_handler:
   #         the STM32 IMU (gyro_z, rad/s). Falls back to timer if insufficient
   #         valid gyro samples accumulate — so this is always safe.
   #         IMU is inside the chassis near motors → use spike rejection.
-  recovery_exit_mode: gyro
+  recovery_exit_mode: timer
   recovery_target_deg: 30.0       # degrees to rotate before exiting (gyro mode)
   gyro_max_rad_s: 4.0             # spike filter — discard |gyro_z| above this
   gyro_min_samples: 3             # min valid readings before trusting accumulation

@@ -37,11 +37,12 @@ def create_follower(lc: dict, debug: bool = False):
     algo = lc.get('algorithm', 'pure_pursuit').lower()
 
     common = dict(
-        linear_speed      = lc['linear_speed'],
-        max_angular_speed = lc['max_angular_speed'],
-        crop_top_ratio    = lc['crop_top_ratio'],
-        min_contour_area  = lc['min_contour_area'],
-        lane_offset_px    = lc['lane_offset_px'],
+        linear_speed       = lc['linear_speed'],
+        max_angular_speed  = lc['max_angular_speed'],
+        crop_top_ratio     = lc['crop_top_ratio'],
+        min_contour_area   = lc['min_contour_area'],
+        lane_offset_px     = lc['lane_offset_px'],
+        driving_direction  = lc.get('driving_direction', 'clockwise'),
         white_hsv_low     = (lc['white_h_low'],  lc['white_s_low'],  lc['white_v_low']),
         white_hsv_high    = (lc['white_h_high'], lc['white_s_high'], lc['white_v_high']),
         yellow_hsv_low    = (lc['yellow_h_low'],  lc['yellow_s_low'],  lc['yellow_v_low']),
