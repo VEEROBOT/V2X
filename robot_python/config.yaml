@@ -213,10 +213,13 @@ lane_follower:
   # keeps them cleanly separated. Cyan fallback (below) covers any further AWB shift to teal.
   yellow_h_low:   60   # was 20 — measured yellow tape: H≈73; start below measured value for margin
   yellow_h_high:  90   # was 35 — upper bound above measured H=73
-  yellow_s_low:   70   # was 80 — slightly relaxed to catch dimmer/edge pixels of narrow tape
-  yellow_s_high: 255   # keep 255 — accept any saturation above s_low
-  yellow_v_low:   80   # lower if yellow tape is dim / shadowed (try 50); raise if bright non-yellow detected
-  yellow_v_high: 255   # keep 255 — always accept bright yellows
+  yellow_s_low:  120   # raised from 70: glossy vinyl reflections are lower-S than real tape
+                       # real yellow tape S=120+; specular highlights S=50-100 → excluded
+                       # lower back to 80 if yellow tape stops being detected
+  yellow_s_high: 255
+  yellow_v_low:   80   # lower if yellow tape is dim / shadowed
+  yellow_v_high: 220   # cap: LED specular reflections hit V=230+; real tape at distance V≈150-210
+                       # raise to 255 if tape near the robot (very close = brighter) is missed
 
   # Cyan fallback — catches yellow tape when camera AWB shifts it to teal/cyan
   # Leave these alone unless cyan/teal objects in the arena cause false detections
