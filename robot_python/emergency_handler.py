@@ -636,9 +636,16 @@ class EmergencyHandler:
         Safety bail-out: once we've been off the white line for evade_watchdog_s
         with NO fresh ambulance data to justify still hiding, give up and recover
         to the white line instead of sitting blind on the boundary.
+
+        Suppressed when force_yield is True (A-button solo test mode) — there is
+        intentionally no ambulance broadcasting in that case, so amb_fresh() is
+        always False and would trip the watchdog immediately, cutting evasion
+        short before the robot even reaches the green line.
         """
         if self._evade_watchdog <= 0:
             return False
+        if self._force_yield:
+            return False   # solo test: no ambulance expected, watchdog not relevant
         return ((now - self._evade_start_t) >= self._evade_watchdog
                 and not self._amb_fresh(now))
 

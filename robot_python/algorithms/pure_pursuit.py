@@ -135,8 +135,12 @@ class PurePursuitFollower(BaseFollower):
         white_found = len(points) > 0
         self._last_cx = points[0][1] if points else None  # near-most point for logging
 
-        # Combined no-white timer
-        if not white_found:
+        # Combined no-white timer — only count as truly lost when neither white
+        # nor a shoulder line (green/blue) is visible. Green or blue means the
+        # robot still knows where it is and can navigate back to the white line;
+        # stopping it dead would prevent the shoulder-repulsion from working.
+        shoulder_visible = (self._last_gcx is not None or self._last_bcx is not None)
+        if not white_found and not shoulder_visible:
             if self._no_white_start is None:
                 self._no_white_start = now
             if (now - self._no_white_start) >= self._no_white_stop_s:
