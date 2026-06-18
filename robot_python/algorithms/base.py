@@ -56,6 +56,7 @@ class BaseFollower(ABC):
                  lost_search_fwd_s:   float = 0.4,
                  white_v_auto:        bool  = True,
                  image_gamma:         float = 1.0,
+                 hsv_panel:           bool  = True,
                  debug:               bool  = False):
 
         self._linear_speed    = linear_speed
@@ -95,7 +96,16 @@ class BaseFollower(ABC):
         self._search_turn_spd    = float(lost_search_turn_spd)
         self._search_arm_s       = float(lost_search_arm_s)
         self._search_fwd_s       = float(lost_search_fwd_s)
+        self._hsv_panel          = bool(hsv_panel)
         self._debug              = debug
+
+        # Precomputed hue→BGR LUT (180 entries) — used by _draw_hsv_panel()
+        # to colour each histogram bar without calling cvtColor in the loop.
+        _hr = np.zeros((1, 180, 3), np.uint8)
+        _hr[0, :, 0] = np.arange(180, dtype=np.uint8)
+        _hr[0, :, 1] = 220
+        _hr[0, :, 2] = 180
+        self._hue_bgr_lut: np.ndarray = cv2.cvtColor(_hr, cv2.COLOR_HSV2BGR)[0]
 
         # Shared PID / steering state
         self._prev_error     = 0.0
@@ -110,6 +120,7 @@ class BaseFollower(ABC):
         self._search_phase_t = 0.0  # monotonic timestamp of phase start (0 = not started)
 
         # Last frame data (used by get_roi_panels / get_debug_info)
+        self._last_hsv:   Optional[np.ndarray] = None
         self._last_roi    = None
         self._last_mask_w = None
         self._last_mask_y = None
@@ -195,6 +206,22 @@ class BaseFollower(ABC):
         near = self._last_mask_y[3 * h // 4:, :]   # bottom QUARTER = very close to robot
         return int(near.sum()) > self._min_area * 255 * 8
 
+    def is_blue_near(self) -> bool:
+        """
+        True when blue (inner shoulder) tape is dense in the bottom quarter of
+        the ROI — i.e. the robot is physically very close to the inner shoulder.
+        Used by emergency_handler as an inward overshoot stopper during RECOVERING.
+        """
+        if self._last_mask_b is None:
+            return False
+        h = self._last_mask_b.shape[0]
+        near = self._last_mask_b[3 * h // 4:, :]
+        return int(near.sum()) > self._min_area * 255 * 8
+
+    def set_hsv_panel(self, enabled: bool) -> None:
+        """Enable or disable the HSV debug panel in get_roi_panels()."""
+        self._hsv_panel = bool(enabled)
+
     def reset_pid(self):
         self._integral       = 0.0
         self._prev_error     = 0.0
@@ -252,6 +279,7 @@ class BaseFollower(ABC):
         if self._gamma_lut is not None:
             roi = cv2.LUT(roi, self._gamma_lut)
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        self._last_hsv = hsv
         if self._white_v_auto:
             v   = hsv[:, :, 2]
             v_floor = float(np.percentile(v, 30))
@@ -303,3 +331,87 @@ class BaseFollower(ABC):
         cx, cy = self._color_centroid(mask)
         self._last_ycy = cy
         return cx
+
+    def _color_stats(self, mask) -> tuple:
+        """
+        Median H, S, V of pixels selected by mask.
+        Returns (h_med, s_med, v_med, pixel_count).
+        h/s/v are None when fewer than 20 pixels are detected.
+        """
+        if self._last_hsv is None or mask is None:
+            return None, None, None, 0
+        detected = mask > 0
+        count = int(detected.sum())
+        if count < 20:
+            return None, None, None, count
+        return (int(np.median(self._last_hsv[:, :, 0][detected])),
+                int(np.median(self._last_hsv[:, :, 1][detected])),
+                int(np.median(self._last_hsv[:, :, 2][detected])),
+                count)
+
+    def _draw_hsv_panel(self, panel_w: int, panel_h: int) -> np.ndarray:
+        """
+        Returns a (panel_h × panel_w × 3) BGR debug image showing:
+          Top strip  : hue histogram of the current ROI with threshold range markers.
+          2×2 grid   : W / Y / G / B masks, each with live median H S V overlay.
+
+        The hue histogram uses a precomputed LUT so no cvtColor calls run in the
+        rendering loop — safe to call at stream rate (~25 Hz).
+        """
+        HIST_H  = 32
+        quad_h  = (panel_h - HIST_H) // 2
+        quad_w  = panel_w // 2
+        out     = np.zeros((panel_h, panel_w, 3), np.uint8)
+
+        # ── Hue histogram ─────────────────────────────────────────────────
+        if self._last_hsv is not None:
+            N     = 36
+            hist, _ = np.histogram(self._last_hsv[:, :, 0].flatten(),
+                                   bins=N, range=(0, 180))
+            peak  = int(hist.max()) or 1
+            bw    = panel_w / N
+            for i, cnt in enumerate(hist):
+                bh  = int(cnt / peak * HIST_H)
+                x0  = int(i * bw)
+                x1  = int((i + 1) * bw)
+                h_v = min(int((i + 0.5) * 180 / N), 179)
+                bgr = self._hue_bgr_lut[h_v].tolist()
+                cv2.rectangle(out, (x0, HIST_H - bh), (x1 - 1, HIST_H - 1), bgr, -1)
+            # Threshold range brackets: Y, G, B
+            for lo, hi, col, lbl in [
+                (self._yellow_lo[0], self._yellow_hi[0], (0,  200, 255), 'Y'),
+                (self._green_lo[0],  self._green_hi[0],  (0,  200,   0), 'G'),
+                (self._blue_lo[0],   self._blue_hi[0],   (200, 100,  30), 'B'),
+            ]:
+                x0 = int(lo * panel_w / 180)
+                x1 = int(hi * panel_w / 180)
+                cv2.rectangle(out, (x0, 0), (x1, HIST_H - 1), col, 1)
+                if x1 - x0 > 8:
+                    cv2.putText(out, lbl, (x0 + 2, HIST_H - 3),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.25, col, 1)
+            cv2.putText(out, "HUE 0-180", (2, 9),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.26, (140, 140, 140), 1)
+
+        # ── 2×2 mask quadrants ────────────────────────────────────────────
+        quads = [
+            ('W', self._last_mask_w, (220, 220, 220),  0,      0,      (255, 255, 255)),
+            ('Y', self._last_mask_y, (0,   215, 255),  0,      quad_w, (0,   215, 255)),
+            ('G', self._last_mask_g, (0,   200,   0),  quad_h, 0,      (0,   200,   0)),
+            ('B', self._last_mask_b, (200, 100,  30),  quad_h, quad_w, (200, 130,  60)),
+        ]
+        for label, mask, px_col, ry, rx, txt_col in quads:
+            py, px = HIST_H + ry, rx
+            if mask is not None:
+                m = cv2.resize(mask, (quad_w, quad_h),
+                               interpolation=cv2.INTER_NEAREST)
+                out[py:py + quad_h, px:px + quad_w][m > 0] = px_col
+            hm, sm, vm, cnt = self._color_stats(mask)
+            top_txt  = f"{label}  {cnt}px"
+            stat_txt = f"H{hm} S{sm} V{vm}" if hm is not None else "not detected"
+            cv2.putText(out, top_txt,  (px + 2, py + 11),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.30, txt_col, 1)
+            cv2.putText(out, stat_txt, (px + 2, py + quad_h - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.28, (190, 190, 190), 1)
+            cv2.rectangle(out, (px, py), (px + quad_w - 1, py + quad_h - 1),
+                          (55, 55, 55), 1)
+        return out

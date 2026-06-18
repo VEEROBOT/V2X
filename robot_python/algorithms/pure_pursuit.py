@@ -361,17 +361,20 @@ class PurePursuitFollower(BaseFollower):
             glp_y = max(0, min(h - 1, int(h - gla)))
             cv2.circle(left, (glp_x, glp_y), 6, (0, 200, 0), 2)
 
-        right = np.zeros_like(roi)
-        if self._last_mask_w is not None:
-            right[self._last_mask_w > 0] = (220, 220, 220)
-        if self._last_mask_y is not None:
-            right[self._last_mask_y > 0] = (0, 215, 255)
-        if self._last_mask_g is not None:
-            right[self._last_mask_g > 0] = (0, 200, 0)
-        if self._last_mask_b is not None:
-            right[self._last_mask_b > 0] = (255, 100, 0)
-        cv2.putText(right, "HSV MASK", (2, h - 3),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
+        if self._hsv_panel:
+            right = self._draw_hsv_panel(w, h)
+        else:
+            right = np.zeros_like(roi)
+            if self._last_mask_w is not None:
+                right[self._last_mask_w > 0] = (220, 220, 220)
+            if self._last_mask_y is not None:
+                right[self._last_mask_y > 0] = (0, 215, 255)
+            if self._last_mask_g is not None:
+                right[self._last_mask_g > 0] = (0, 200, 0)
+            if self._last_mask_b is not None:
+                right[self._last_mask_b > 0] = (255, 100, 0)
+            cv2.putText(right, "HSV MASK", (2, h - 3),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
 
         return np.hstack([left, right])
 

@@ -253,6 +253,7 @@ class EmergencyHandler:
                 yellow_cy_frac: Optional[float] = None,
                 green_cx:       Optional[float] = None,
                 green_cy_frac:  Optional[float] = None,
+                blue_near:      bool            = False,
                 frame_w:        int             = 320,
                 outer_tag:      bool            = False,
                 gyro_z:         float           = 0.0,
@@ -270,6 +271,9 @@ class EmergencyHandler:
                           During outer evasion: this is the PRIMARY HOLD TARGET. The robot
                           steers to keep the green line on the evasion side of the frame.
         green_cy_frac   — normalised vertical centroid of green (0=top/far, 1=bottom/near).
+        blue_near       — True when the blue inner-shoulder tape is dense in the bottom
+                          quarter of the ROI (robot physically at the inner shoulder).
+                          Used as an inward overshoot stopper during RECOVERING.
         frame_w         — camera frame width in pixels (default 320).
         outer_tag       — True when an outer boundary AprilTag was detected.
         gyro_z          — yaw-rate from STM32 IMU in rad/s (positive = left turn).
@@ -342,6 +346,17 @@ class EmergencyHandler:
             # ===== OUTER evasion (toward outer boundary) =====
             # Robot steers toward the GREEN shoulder line and holds beside it.
             # Yellow seen during evasion = overshot → danger handled inside _outer_steer.
+
+            # Blind-arc abort: if the boundary tapes (green AND yellow) have never
+            # been detected after (min_evasion_s + 1.5 s), detection has failed —
+            # abort to RECOVERING rather than arcing blindly toward the arena edge.
+            if (not self._outer_yellow_seen
+                    and elapsed > self._ev_min + 1.5):
+                logger.warning("EVADING: no boundary tape detected for %.1fs → RECOVERING",
+                               elapsed - self._ev_min)
+                self._enter(_RECOVERING, now)
+                return self._rec_linear, self._rec_angular
+
             ev_vx, ev_wz, established = self._outer_steer(
                 green_cx, green_cy_frac, yellow_cx, frame_w, self._ev_linear,
                 boundary_near=boundary_near)
@@ -351,8 +366,15 @@ class EmergencyHandler:
                             established, outer_tag, elapsed)
                 self._enter(_HOLDING, now)
             elif elapsed >= self._ev_dur:
-                logger.info("EVADING → HOLDING: evasion timer expired")
-                self._enter(_HOLDING, now)
+                # Only enter HOLDING if the boundary was actually established this
+                # episode. Without confirmed contact, go to RECOVERING so the robot
+                # does not continue arcing outward in HOLDING with no reference.
+                if self._outer_yellow_seen:
+                    logger.info("EVADING → HOLDING: evasion timer expired (boundary established)")
+                    self._enter(_HOLDING, now)
+                else:
+                    logger.warning("EVADING → RECOVERING: timer expired, boundary never detected")
+                    self._enter(_RECOVERING, now)
             return ev_vx, ev_wz
 
         # ── HOLDING ──────────────────────────────────────────────────────────
@@ -419,6 +441,13 @@ class EmergencyHandler:
                   and self._recovery_angle_rad    >= self._rec_target_rad):
                 logger.info("RECOVERING → RESUMING: gyro %.1f° reached (%d samples)",
                             math.degrees(self._recovery_angle_rad), self._recovery_gyro_samples)
+                self._enter(_RESUMING, now)
+            elif (self._ev_side < 0 and blue_near and elapsed >= self._rec_min_s):
+                # Outer evasion only: blue shoulder detected means the robot has
+                # overshot the white line inward and reached the inner shoulder.
+                # Stop the arc and hand back to the lane follower — its blue repel
+                # will push the robot back outward to the white line.
+                logger.warning("RECOVERING → RESUMING: blue shoulder near — overshot white inward")
                 self._enter(_RESUMING, now)
             elif elapsed >= self._rec_dur:
                 logger.info("RECOVERING → RESUMING: timeout (white not centred)")

@@ -361,6 +361,7 @@ def main():
     # ── Lane follower ─────────────────────────────────────────────────────
     lc = cfg['lane_follower']
     follower = create_follower(lc, debug=args.debug_image or lc.get('debug_image', False))
+    follower.set_hsv_panel(cfg.get('stream', {}).get('hsv_panel', True))
     logger.info("Lane follower algorithm: %s", lc.get('algorithm', 'pure_pursuit'))
 
     # ── Position estimator + broadcaster ─────────────────────────────────
@@ -599,6 +600,7 @@ def main():
                     yellow_cy_frac  = dbg.get('yellow_cy_frac'),
                     green_cx        = _green_cx,
                     green_cy_frac   = dbg.get('green_cy_frac'),
+                    blue_near       = follower.is_blue_near(),
                     outer_tag       = estimator.is_off_track(),
                     gyro_z          = gyro_z,
                     white_err       = dbg.get('white_err'),

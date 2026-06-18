@@ -166,13 +166,16 @@ class CentroidFollower(BaseFollower):
         cv2.putText(left, f"CENTROID {self._mode}", (2, h - 3),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.3, mode_col, 1)
 
-        right = np.zeros_like(roi)
-        if self._last_mask_w is not None:
-            right[self._last_mask_w > 0] = (220, 220, 220)
-        if self._last_mask_y is not None:
-            right[self._last_mask_y > 0] = (0, 215, 255)
-        cv2.putText(right, "HSV MASK", (2, h - 3),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
+        if self._hsv_panel:
+            right = self._draw_hsv_panel(w, h)
+        else:
+            right = np.zeros_like(roi)
+            if self._last_mask_w is not None:
+                right[self._last_mask_w > 0] = (220, 220, 220)
+            if self._last_mask_y is not None:
+                right[self._last_mask_y > 0] = (0, 215, 255)
+            cv2.putText(right, "HSV MASK", (2, h - 3),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, (140, 140, 140), 1)
 
         return np.hstack([left, right])
 
