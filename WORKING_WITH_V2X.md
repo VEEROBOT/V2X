@@ -30,13 +30,15 @@
 ## What Runs Where
 
 ```
-LAPTOP  (e.g. 192.168.0.103)
-  ├── Desktop server    ~/V2X/v2x_testbed/v2x_run_desktop.sh  → Dashboard http://localhost:5000
-  └── RSU binary        ~/V2X/v2x_testbed/v2x_run_rsu.sh
-        ├── UDP 5000  ← OBU authentication
+LAPTOP  (e.g. 192.168.0.101)
+  └── Desktop server    ~/V2X/v2x_testbed/v2x_run_desktop.sh  → Dashboard http://localhost:5000
         ├── TCP 8001  ← OBU entity registration
         ├── TCP 8002  ← RSU entity registration
-        ├── TCP 9000  ← audit log from RSU
+        └── TCP 9000  ← audit log from RSU
+
+RSU PI  (e.g. 192.168.0.103)
+  └── RSU binary        ~/V2X/v2x_testbed/v2x_run_rsu.sh
+        ├── UDP 5000  ← OBU authentication
         └── UDP 5001 broadcast → EMERGENCY_ACTIVE / EMERGENCY_CLEARED to all robots
 
 CAR PI  (hostname: v2x, e.g. 192.168.0.100)
@@ -65,11 +67,12 @@ AMBULANCE PI  (hostname: v2x-emgy, e.g. 192.168.0.104)
 
 | Device | IP (example) | Hostname | What it runs |
 |--------|-------------|----------|--------------|
-| Laptop | `192.168.0.103` | `v2x` (dev) | RSU binary + Desktop server |
+| Laptop | `192.168.0.101` | — | Desktop server (dashboard + key authority) |
+| RSU Pi | `192.168.0.103` | `v2x-rsu` | RSU binary (authentication server) |
 | Car Pi | `192.168.0.100` | `v2x` | `v2x_car` systemd service |
 | Ambulance Pi | `192.168.0.104` | `v2x-emgy` | `v2x_ambulance` systemd service |
 
-All devices must be on the same WiFi network. The RSU broadcasts emergency alerts to `192.168.0.255` (subnet broadcast) — every robot receives them automatically.
+All devices must be on the same WiFi network. The RSU Pi broadcasts emergency alerts to `192.168.0.255` (subnet broadcast) — every robot receives them automatically.
 
 ---
 
@@ -100,13 +103,15 @@ Open `http://localhost:5000` in a browser. Leave this terminal running.
 
 ---
 
-### STEP 2 — Laptop: start the RSU (Terminal 2)
+### STEP 2 — RSU Pi: start the RSU
+
+SSH into the RSU Pi, then:
 
 ```bash
 ~/V2X/v2x_testbed/v2x_run_rsu.sh
 ```
 
-This clears old RSU keys and starts the RSU binary. The RSU re-registers with Desktop and receives a fresh keypair.
+This clears old RSU keys and starts the RSU binary. The RSU Pi registers with the Desktop (laptop) and receives a fresh keypair.
 
 Expected output:
 ```
@@ -201,10 +206,10 @@ Or check from the command line:
 Use the run scripts — they always regenerate configs and clear keys:
 
 ```bash
-# Laptop Terminal 1:
+# Laptop:
 ~/V2X/v2x_testbed/v2x_run_desktop.sh
 
-# Laptop Terminal 2:
+# RSU Pi:
 ~/V2X/v2x_testbed/v2x_run_rsu.sh
 
 # Car Pi:
@@ -454,9 +459,8 @@ python3 ~/projects/V2X/robot_python/control_socket.py --port 5011 --host 192.168
 # System status
 ~/V2X/v2x_testbed/v2x_status.sh
 
-# Start everything fresh
-~/V2X/v2x_testbed/v2x_run_desktop.sh   # Terminal 1
-~/V2X/v2x_testbed/v2x_run_rsu.sh       # Terminal 2
+# Start Desktop server
+~/V2X/v2x_testbed/v2x_run_desktop.sh
 
 # Check NTP sync on Pi (auth timestamps fail if clocks are out of sync)
 ssh veerobot@v2x.local timedatectl status
@@ -490,17 +494,22 @@ All changes happen in the repo. Edit → commit → push → `git pull` on each 
 > `obu_local.json` is never edited manually. The run scripts regenerate it from `obu1_config.json`
 > each time. If you change laptop IP, update `obu1_config.json`, commit, pull on Pis, run `v2x_run_*`.
 
-### When laptop IP changes
+### When IPs change
+
+`obu1_config.json` has two separate IPs — update each independently:
 
 ```bash
-# On a Pi (or laptop, then push):
 nano ~/projects/V2X/v2x_testbed/obu/config/obu1_config.json
-# Update: "rsu_ip" and "desktop_ip" to the new laptop IP
-git commit -am "update laptop IP to 192.168.x.x"
+# "rsu_ip"     → IP of the RSU Pi     (e.g. 192.168.0.103)
+# "desktop_ip" → IP of the laptop     (e.g. 192.168.0.101)
+git commit -am "update IPs"
 git push
 
-# On each Pi:
+# On each robot Pi:
 git pull && v2x_run_car        # or v2x_run_ambulance
+
+# On the RSU Pi (rsu_config.json has desktop_ip):
+git pull && ~/V2X/v2x_testbed/v2x_run_rsu.sh
 ```
 
 ### Critical values in config.yaml
@@ -708,10 +717,13 @@ Unplug and re-plug the USB dongle if `/dev/input/js0` is absent.
 The OBU needs the RSU's public key to authenticate. The RSU must register with Desktop **before** OBUs start.
 
 ```bash
-# On laptop, restart in correct order:
-~/V2X/v2x_testbed/v2x_run_desktop.sh   # Terminal 1
-~/V2X/v2x_testbed/v2x_run_rsu.sh       # Terminal 2 — wait for "[REG] ✓ Registration complete for RSU"
-# Then run v2x_run_car / v2x_run_ambulance on the Pis
+# On laptop:
+~/V2X/v2x_testbed/v2x_run_desktop.sh   # wait for "[DASH] Dashboard starting"
+
+# On RSU Pi:
+~/V2X/v2x_testbed/v2x_run_rsu.sh       # wait for "[REG] ✓ Registration complete for RSU"
+
+# Then run v2x_run_car / v2x_run_ambulance on the robot Pis
 ```
 
 Look for `PUBLIC_KEY_PEER: 70 bytes` in the OBU log — this means it received the RSU's key.
@@ -761,7 +773,7 @@ sudo journalctl -u v2x_car | grep "RSU alert listener"
 # Must show: RSU alert listener started on UDP port 5001
 ```
 - Check `v2x_bridge: manual_mode: false` in `config.yaml`
-- Both Pi and laptop must be on the **same WiFi subnet** (both `192.168.0.x`)
+- All devices (laptop, RSU Pi, robot Pis) must be on the **same WiFi subnet** (`192.168.0.x`)
 - RSU config must have `"car_alert_ip": "192.168.0.255"` (broadcast, not a specific IP)
 
 ### TIMESTAMP_CHECK_FAIL events

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# v2x_run_rsu — start RSU server
-# Run this in Terminal 2 AFTER v2x_run_desktop is up.
+# v2x_run_rsu — start RSU server on the RSU Pi
+# Run this on the RSU Pi AFTER v2x_run_desktop is up on the laptop.
 #
-# Add to PATH (run once on laptop):
+# Add to PATH (run once on RSU Pi):
 #   echo 'export PATH="$PATH:$HOME/V2X/v2x_testbed"' >> ~/.bashrc && source ~/.bashrc
 
 set -e

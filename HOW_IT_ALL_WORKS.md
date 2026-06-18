@@ -34,14 +34,17 @@ robot_python/         ← the ROBOT layer
 ## 2. What Runs Where at Runtime
 
 ```
-LAPTOP / DESKTOP PC
+LAPTOP / DESKTOP PC  (192.168.0.101)
 ┌────────────────────────────────────────────────────────────────┐
 │  [Terminal 1]  Desktop server  (Python)   port 5000 (HTTP)     │
 │    - Issues cryptographic keys to everyone who registers       │
 │    - Runs the dashboard you see in the browser                 │
 │    - Accepts heartbeats from robots (ONLINE/OFFLINE status)    │
-│                                                                │
-│  [Terminal 2]  RSU binary  (C++)          port 5000 (UDP)      │
+└────────────────────────────────────────────────────────────────┘
+
+RSU Pi  (192.168.0.103)
+┌────────────────────────────────────────────────────────────────┐
+│  [systemd / terminal]  RSU binary  (C++)  port 5000 (UDP)      │
 │    - Authenticates OBU packets                                 │
 │    - When it sees an ambulance: broadcasts EMERGENCY_ACTIVE    │
 │      → UDP broadcast to 192.168.0.255:5001 (every robot hears)│
@@ -83,7 +86,7 @@ AMBULANCE Pi  (v2x-emgy)
 
 The RSU needs a cryptographic keypair from the Desktop before it can authenticate anyone.
 OBUs need the RSU's public key before they can authenticate.
-**Order always: Desktop → RSU → Robots.**
+**Order always: Desktop (laptop) → RSU (RSU Pi) → Robots.**
 
 ---
 
@@ -565,14 +568,14 @@ t=0s    Car and ambulance armed (Start button pressed on each)
         Both start following the white line at ~0.20 m/s
 
 t=0–2s  OBU authentication in progress
-        Car OBU → RSU: AuthRequest
-        RSU → Car OBU: AuthResponse + KC2 → session established
+        Car OBU → RSU Pi: AuthRequest
+        RSU Pi → Car OBU: AuthResponse + KC2 → session established
         (Car post-auth: is_emergency=false → no broadcast)
 
-        Ambulance OBU → RSU: AuthRequest  
-        RSU → Ambulance OBU: AuthResponse + KC2
+        Ambulance OBU → RSU Pi: AuthRequest
+        RSU Pi → Ambulance OBU: AuthResponse + KC2
         Ambulance post-auth: is_emergency=true
-        → RSU broadcasts EMERGENCY_ACTIVE to 192.168.0.255:5001
+        → RSU Pi broadcasts EMERGENCY_ACTIVE to 192.168.0.255:5001
 
 t=2s    Car's RSU alert listener receives EMERGENCY_ACTIVE
         v2x_bridge._emergency = True

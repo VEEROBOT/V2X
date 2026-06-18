@@ -28,18 +28,18 @@ The system is designed as a modular research platform aligned with the V2X Authe
 
 ```
 ┌─────────────────────────────────────────┐
-│         Desktop Server (Python)         │
+│     Desktop Server — Laptop (Python)    │
 │  ├─ Registration Server (TCP 8001/8002)│
 │  ├─ Log Receiver (TCP 9000)            │
 │  └─ Dashboard (HTTP 5000, WebSocket)   │
 └─────────────────────────────────────────┘
-         ↓ TCP (Reg)       ↑ TCP (Logs)
-         ↓                 ↑
-    ┌────────────┐    ┌─────────────┐
-    │   OBU      │    │    RSU      │
-    │ C++ Client │←→UDP:5000→│ C++ Server │
-    └────────────┘    └─────────────┘
-     (Vehicle)        (Roadside)
+    ↓ TCP (Reg/Logs)           ↑ TCP (Logs)
+    ↓                          ↑
+┌────────────┐          ┌──────────────────┐
+│   OBU      │          │  RSU — RSU Pi    │
+│ C++ Client │←→UDP:5000→│  C++ Server      │
+└────────────┘          └──────────────────┘
+ (Robot Pi)              (Dedicated Pi)
 ```
 
 ---
@@ -149,7 +149,7 @@ make -j$(nproc)
 
 ### 4️⃣ Run the System
 
-**Terminal 1 – Desktop Server**
+**Laptop — Desktop Server**
 
 ```bash
 cd desktop
@@ -157,14 +157,17 @@ rm -f database/v2x_testbed.db database/master_secret.bin
 python3 server.py
 ```
 
-**Terminal 2 – RSU**
+**RSU Pi — RSU Server**
 
 ```bash
 cd rsu/build
 ./rsu_server ../config/rsu_config.json
 ```
 
-**Terminal 3 – OBU**
+The RSU Pi registers with the Desktop (laptop) on startup and receives a fresh keypair.
+Start the Desktop server first, then the RSU.
+
+**Robot Pi — OBU Client** (or run from any machine for testing)
 
 ```bash
 cd obu/build
@@ -175,7 +178,7 @@ cd obu/build
 
 ### Dashboard
 
-Access:
+Access from the laptop:
 
 ```
 http://localhost:5000
@@ -365,22 +368,22 @@ After session establishment, OBU sends an AES-256-GCM encrypted message to RSU:
 
 Run a single OBU authentication to RSU:
 
-**Terminal 1:**
+**Laptop:**
 ```bash
-cd ~/v2x_testbed/desktop
+cd ~/V2X/v2x_testbed/desktop
 rm -f database/v2x_testbed.db database/master_secret.bin
 python3 server.py
 ```
 
-**Terminal 2:**
+**RSU Pi:**
 ```bash
-cd ~/v2x_testbed/rsu/build
+cd ~/V2X/v2x_testbed/rsu/build
 ./rsu_server ../config/rsu_config.json
 ```
 
-**Terminal 3:**
+**Robot Pi (OBU):**
 ```bash
-cd ~/v2x_testbed/obu/build
+cd ~/V2X/v2x_testbed/obu/build
 ./obu_client ../config/obu1_config.json
 ```
 
@@ -390,22 +393,22 @@ Opens dashboard at `http://localhost:5000` and shows event log.
 
 Run 10 consecutive authentication cycles to measure consistency:
 
-**Terminal 1:**
+**Laptop:**
 ```bash
-cd ~/v2x_testbed/desktop
+cd ~/V2X/v2x_testbed/desktop
 rm -f database/v2x_testbed.db database/master_secret.bin
 python3 server.py
 ```
 
-**Terminal 2:**
+**RSU Pi:**
 ```bash
-cd ~/v2x_testbed/rsu/build
+cd ~/V2X/v2x_testbed/rsu/build
 ./rsu_server ../config/rsu_config.json
 ```
 
-**Terminal 3 — Run 10 authentications:**
+**Robot Pi — Run 10 authentications:**
 ```bash
-cd ~/v2x_testbed/obu/build
+cd ~/V2X/v2x_testbed/obu/build
 ./obu_client ../config/obu1_config.json --loop 10
 ```
 

@@ -65,6 +65,9 @@ touching the rest.
 RSU session management, real-time WebSocket dashboard, SQLite audit logging,
 pluggable cryptographic provider.
 
+The Desktop server runs on the laptop. The RSU binary runs on a dedicated RSU Raspberry Pi.
+Both must be running before the robot Pis are started.
+
 PlaceholderProvider (ECDSA/ECDH) is active for development. LatticeProvider interface
 is ready — plug in a post-quantum implementation when it exists and the protocol does
 not change.
@@ -105,20 +108,21 @@ This work required all of them to exist simultaneously and operate as a single s
 
 ## Quick Start
 
-Desktop and RSU must be running before starting the robots.
+Desktop (laptop) and RSU (RSU Pi) must be running before starting the robots.
 
 ```bash
-# Desktop (any machine on the network)
+# Laptop — Desktop server
 cd v2x_testbed/desktop
 python3 server.py
 
-# Car (Raspberry Pi)
-cd robot_python
-python3 main_car.py
+# RSU Pi — RSU binary
+~/V2X/v2x_testbed/v2x_run_rsu.sh
 
-# Ambulance (Raspberry Pi)
-cd robot_python
-python3 main_ambulance.py
+# Car Pi
+v2x_run_car
+
+# Ambulance Pi
+v2x_run_ambulance
 ```
 
 Full startup sequence with verification at every step: [WORKING_WITH_V2X.md](WORKING_WITH_V2X.md)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # v2x_status — print a compact health summary of the V2X testbed
-# Run on the laptop/desktop after starting the system.
+# Run on the laptop (where the Desktop server and its SQLite database live).
 # Output can be copy-pasted to share for diagnosis.
 #
 # Usage:
