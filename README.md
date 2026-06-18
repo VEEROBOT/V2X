@@ -100,7 +100,6 @@ This work required all of them to exist simultaneously and operate as a single s
 | [SETUP_PYTHON.md](SETUP_PYTHON.md) | Robot environment setup on a fresh Raspberry Pi |
 | [TRACK_DESIGN.md](TRACK_DESIGN.md) | Arena layout, AprilTag placement, zone numbering |
 | [v2x_testbed/README.md](v2x_testbed/README.md) | V2X authentication stack: protocol spec, build, run |
-| [presentation/index.html](presentation/index.html) | Client-facing showcase presentation — open in any browser |
 
 ---
 
