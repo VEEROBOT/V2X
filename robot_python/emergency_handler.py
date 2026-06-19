@@ -369,6 +369,13 @@ class EmergencyHandler:
                 # Only enter HOLDING if the boundary was actually established this
                 # episode. Without confirmed contact, go to RECOVERING so the robot
                 # does not continue arcing outward in HOLDING with no reference.
+                #
+                # Note: under the default config (min_evasion_s=1.5,
+                # evasion_duration_s=3.5) the blind-arc abort above fires at 3.0s,
+                # so this else branch is unreachable in the "boundary never found"
+                # case. It is intentional defense-in-depth: if min_evasion_s is
+                # ever raised close to or above evasion_duration_s, the timer fires
+                # first and this guard still prevents a dangerous HOLDING entry.
                 if self._outer_yellow_seen:
                     logger.info("EVADING → HOLDING: evasion timer expired (boundary established)")
                     self._enter(_HOLDING, now)

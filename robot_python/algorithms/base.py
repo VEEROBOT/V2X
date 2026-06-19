@@ -378,13 +378,15 @@ class BaseFollower(ABC):
                 bgr = self._hue_bgr_lut[h_v].tolist()
                 cv2.rectangle(out, (x0, HIST_H - bh), (x1 - 1, HIST_H - 1), bgr, -1)
             # Threshold range brackets: Y, G, B
+            # int() cast before multiply: self._*_lo/hi are np.uint8 arrays;
+            # indexing them returns np.uint8 scalars which overflow on multiply.
             for lo, hi, col, lbl in [
                 (self._yellow_lo[0], self._yellow_hi[0], (0,  200, 255), 'Y'),
                 (self._green_lo[0],  self._green_hi[0],  (0,  200,   0), 'G'),
                 (self._blue_lo[0],   self._blue_hi[0],   (200, 100,  30), 'B'),
             ]:
-                x0 = int(lo * panel_w / 180)
-                x1 = int(hi * panel_w / 180)
+                x0 = int(int(lo) * panel_w / 180)
+                x1 = int(int(hi) * panel_w / 180)
                 cv2.rectangle(out, (x0, 0), (x1, HIST_H - 1), col, 1)
                 if x1 - x0 > 8:
                     cv2.putText(out, lbl, (x0 + 2, HIST_H - 3),
