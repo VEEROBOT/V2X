@@ -360,7 +360,8 @@ emergency_handler:
                                  # With only boundary_near as the exit condition, 0.35 is safe with min_evasion_s=1.5.
   evasion_duration_s: 3.5       # backup timer only — outer evasion drives toward the boundary
                                  # until yellow is acquired, so this is a safety fallback if the
-                                 # boundary is never detected (raised from 4.0 to give time to reach it)
+                                 # boundary is never detected (lowered from 6.0; blind-arc abort at
+                                 # min_evasion_s+1.5=3.0s handles the "boundary never found" case first)
   min_evasion_s: 1.5            # minimum time in EVADING before HOLDING is allowed (prevents an
                                  # instant flip to HOLDING if yellow happened to be visible at entry)
   # Yellow-tracking proportional control (active once yellow centroid is visible):
@@ -402,7 +403,7 @@ emergency_handler:
   # forward — converging in one smooth motion instead of stalling and nudging.
   rec_white_kp:    0.006        # steer-toward-white gain (× white_err px). 80px→0.48 rad/s
   rec_white_max:   0.60         # rad/s cap on the white-seek turn
-  rec_white_tol:   20           # |white_err| px below this = "centred" → finish recovery
+  rec_white_tol:   40           # |white_err| px below this = "centred" → finish recovery
   resume_vx_floor: 0.50         # RESUMING starts at this fraction of follower speed (no stall);
                                  # steering is NOT ramped so it can correct immediately
 
